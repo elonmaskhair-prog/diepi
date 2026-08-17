@@ -336,4 +336,4 @@ def test_pypi_readme_has_no_unresolvable_relative_markdown_links():
 
     assert "](" not in text
     assert "docs/product/03-user-guide.md" in text
-    assert "本文不虚构" in text
+    assert "https://github.com/elonmaskhair-prog/diepi" in text

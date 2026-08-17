@@ -4,7 +4,7 @@
 > 不把 Roadmap 或架构设想写成现成功能。源码链接后的行号对应本文编写时的工作树；
 > 后续代码移动时，请优先搜索链接中给出的稳定符号名。
 
-> 文档导航：[项目首页](../../README.md) · [目录](README.md) · [作者序（可选）](01-author-note.md) ·
+> 文档导航：[项目首页](../../README.md) · [目录](README.md) · [作者序（可选）](../../README.md#写在项目前为什么做-dieπ) ·
 > [核心功能](02-core-features.md) · [用户手册](03-user-guide.md) · [参考与边界](04-reference-and-boundaries.md) ·
 > [本地行情数据格式 v1](05-local-market-data-format-v1.md)
 

@@ -3,7 +3,7 @@
 > 适用于当前 `0.1.0` 代码树（[`pyproject.toml:7 — project.version`](../../pyproject.toml#L7)），校对日期：2026-08-16。
 > 本文是“查精确契约”的参考页，不是功能路线图。源码链接的行号对应本文编写时的工作树；以后若代码移动，请优先按链接中的稳定类名、函数名或常量名搜索。
 
-> 文档导航：[项目首页](../../README.md) · [目录](README.md) · [作者序（可选）](01-author-note.md) ·
+> 文档导航：[项目首页](../../README.md) · [目录](README.md) · [作者序（可选）](../../README.md#写在项目前为什么做-dieπ) ·
 > [核心功能](02-core-features.md) · [用户手册](03-user-guide.md) · [参考与边界](04-reference-and-boundaries.md) ·
 > [本地行情数据格式 v1](05-local-market-data-format-v1.md)
 

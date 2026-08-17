@@ -4,7 +4,7 @@
 > 本手册只描述当前仓库可以验证的行为。遇到“实验性”“部分支持”时，请先阅读[参考与边界](04-reference-and-boundaries.md)。
 > 源码链接中的行号对应本文编写时的工作树；以后若代码移动，请优先按链接旁的类名或函数名搜索。
 
-> 文档导航：[项目首页](../../README.md) · [目录](README.md) · [作者序（可选）](01-author-note.md) ·
+> 文档导航：[项目首页](../../README.md) · [目录](README.md) · [作者序（可选）](../../README.md#写在项目前为什么做-dieπ) ·
 > [核心功能](02-core-features.md) · [用户手册](03-user-guide.md) · [参考与边界](04-reference-and-boundaries.md) ·
 > [本地行情数据格式 v1](05-local-market-data-format-v1.md)
 
