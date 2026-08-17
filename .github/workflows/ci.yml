@@ -33,7 +33,7 @@ jobs:
             requirements: tools/minimum_gui_requirements.txt
             tests: tests/backtest/test_ui_regressions.py
     env:
-      DATA_ROOT: ${{ runner.temp }}/diepi-empty-data
+      DATA_ROOT: ${{ github.workspace }}/.release-gate/ci-empty-data
       QT_QPA_PLATFORM: offscreen
       PYQTGRAPH_QT_LIB: PySide6
     steps:
@@ -52,7 +52,7 @@ jobs:
           "setuptools>=77" pytest==7.0.0
           -r ${{ matrix.requirements }}
       - name: Create an explicitly empty market-data root
-        run: python -c "from pathlib import Path; Path(r'${{ runner.temp }}/diepi-empty-data').mkdir(parents=True, exist_ok=True)"
+        run: python -c "from pathlib import Path; Path(r'${{ github.workspace }}/.release-gate/ci-empty-data').mkdir(parents=True, exist_ok=True)"
       - name: Install diePi without changing the selected versions
         run: python -m pip install --no-build-isolation --no-deps -e .
       - name: Check the resolved environment
@@ -73,7 +73,7 @@ jobs:
           - os: macos-latest
             python: "3.11"
     env:
-      DATA_ROOT: ${{ runner.temp }}/diepi-empty-data
+      DATA_ROOT: ${{ github.workspace }}/.release-gate/ci-empty-data
       QT_QPA_PLATFORM: offscreen
       PYQTGRAPH_QT_LIB: PySide6
     steps:
@@ -91,7 +91,7 @@ jobs:
           python -m pip install --upgrade --only-binary=:all:
           "setuptools>=77" build -e ".[dev,gui]"
       - name: Create an explicitly empty market-data root
-        run: python -c "from pathlib import Path; Path(r'${{ runner.temp }}/diepi-empty-data').mkdir(parents=True, exist_ok=True)"
+        run: python -c "from pathlib import Path; Path(r'${{ github.workspace }}/.release-gate/ci-empty-data').mkdir(parents=True, exist_ok=True)"
       - name: Run data-free tests with count and outcome gates
         run: >-
           python tools/run_test_gate.py
@@ -111,7 +111,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      DATA_ROOT: ${{ runner.temp }}/diepi-empty-data
+      DATA_ROOT: ${{ github.workspace }}/.release-gate/ci-empty-data
       QT_QPA_PLATFORM: offscreen
       PYQTGRAPH_QT_LIB: PySide6
     steps:
@@ -133,7 +133,7 @@ jobs:
           python -m pip install --upgrade --only-binary=:all:
           "setuptools>=77" build -e ".[dev,gui]"
       - name: Create an explicitly empty market-data root
-        run: python -c "from pathlib import Path; Path(r'${{ runner.temp }}/diepi-empty-data').mkdir(parents=True, exist_ok=True)"
+        run: python -c "from pathlib import Path; Path(r'${{ github.workspace }}/.release-gate/ci-empty-data').mkdir(parents=True, exist_ok=True)"
       - name: Build and inspect wheel and sdist
         run: >-
           python tools/build_release.py
@@ -181,7 +181,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      DATA_ROOT: ${{ runner.temp }}/diepi-empty-data
+      DATA_ROOT: ${{ github.workspace }}/.release-gate/ci-empty-data
       QT_QPA_PLATFORM: offscreen
       PYQTGRAPH_QT_LIB: PySide6
     steps:
@@ -199,7 +199,7 @@ jobs:
           python -m pip install --upgrade --only-binary=:all:
           "setuptools>=77" ".[dev,gui]"
       - name: Create an explicitly empty market-data root
-        run: python -c "from pathlib import Path; Path(r'${{ runner.temp }}/diepi-empty-data').mkdir(parents=True, exist_ok=True)"
+        run: python -c "from pathlib import Path; Path(r'${{ github.workspace }}/.release-gate/ci-empty-data').mkdir(parents=True, exist_ok=True)"
       - name: Enforce the reviewed branch-coverage baseline
         run: >-
           python -m coverage run -m pytest -q
