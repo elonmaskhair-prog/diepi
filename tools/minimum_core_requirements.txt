@@ -1,0 +1,4 @@
+# Oldest direct core dependency versions claimed by pyproject.toml.
+numpy==1.23.0
+pandas==1.5.0
+pyarrow==23.0.1

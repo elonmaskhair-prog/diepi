@@ -1,0 +1,32 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pytest_tmp*/
+.deepeval/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# 回测产物
+results/
+diepi_results/
+output/
+parity_runs_v2/
+*.log
+
+# 本地环境
+.venv/
+.env
+.DS_Store
+
+# 打包产物
+build/
+dist/
+*.egg-info/
+.release-gate/
+
+# 本地审阅材料（不进入首次公共历史）
+docs/audit/
+docs/stage1_notes.md

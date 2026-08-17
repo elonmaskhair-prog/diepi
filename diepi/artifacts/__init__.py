@@ -1,0 +1,76 @@
+"""Public contracts for portable, verified diepi run artifacts."""
+
+from .adapters import (
+    ArtifactPayload,
+    RESERVED_ADAPTERS,
+    adapter_for_kind,
+    build_futures_outcome,
+    build_parallel_outcome,
+)
+from .models import (
+    ArtifactDescriptor,
+    ArtifactManifest,
+    EngineKind,
+    ErrorCategory,
+    ProducerInfo,
+    RUN_ARTIFACT_SCHEMA,
+    RUN_ARTIFACT_SCHEMA_VERSION,
+    RUN_ARTIFACT_V1_MAX_MANIFEST_BYTES,
+    RUN_ARTIFACT_V1_MAX_PAYLOAD_BYTES,
+    RUN_ARTIFACT_V1_MAX_PAYLOAD_COUNT,
+    RUN_ARTIFACT_V1_MAX_TOTAL_PAYLOAD_BYTES,
+    RUN_OUTCOME_SCHEMA,
+    RUN_OUTCOME_SCHEMA_VERSION,
+    RunError,
+    RunOutcome,
+)
+from .provenance import (
+    RUN_PROVENANCE_SCHEMA,
+    RUN_PROVENANCE_SCHEMA_VERSION,
+    RunProvenance,
+    SourceFingerprint,
+)
+from .storage import (
+    ArtifactStore,
+    LoadedLegacyRun,
+    LoadedRun,
+    current_producer_info,
+    load_legacy_result,
+    load_run_artifact,
+    save_run_artifact,
+)
+
+
+__all__ = [
+    "ArtifactDescriptor",
+    "ArtifactManifest",
+    "ArtifactPayload",
+    "ArtifactStore",
+    "EngineKind",
+    "ErrorCategory",
+    "LoadedRun",
+    "LoadedLegacyRun",
+    "ProducerInfo",
+    "RESERVED_ADAPTERS",
+    "RUN_ARTIFACT_SCHEMA",
+    "RUN_ARTIFACT_SCHEMA_VERSION",
+    "RUN_ARTIFACT_V1_MAX_MANIFEST_BYTES",
+    "RUN_ARTIFACT_V1_MAX_PAYLOAD_BYTES",
+    "RUN_ARTIFACT_V1_MAX_PAYLOAD_COUNT",
+    "RUN_ARTIFACT_V1_MAX_TOTAL_PAYLOAD_BYTES",
+    "RUN_OUTCOME_SCHEMA",
+    "RUN_OUTCOME_SCHEMA_VERSION",
+    "RUN_PROVENANCE_SCHEMA",
+    "RUN_PROVENANCE_SCHEMA_VERSION",
+    "RunError",
+    "RunOutcome",
+    "RunProvenance",
+    "SourceFingerprint",
+    "adapter_for_kind",
+    "build_futures_outcome",
+    "build_parallel_outcome",
+    "current_producer_info",
+    "load_legacy_result",
+    "load_run_artifact",
+    "save_run_artifact",
+]

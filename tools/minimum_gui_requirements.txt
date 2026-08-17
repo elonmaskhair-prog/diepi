@@ -1,0 +1,6 @@
+# Oldest installable direct GUI profile. pyqtgraph 0.14 requires numpy>=1.25.
+numpy==1.25.0
+pandas==1.5.0
+pyarrow==23.0.1
+PySide6==6.10.0
+pyqtgraph==0.14.0

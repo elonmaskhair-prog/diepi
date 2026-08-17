@@ -1,0 +1,13 @@
+# Keep public source, documentation, fixtures, and generated manifests stable
+# across Windows/macOS/Linux checkouts.
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.parquet binary

@@ -1,0 +1,48 @@
+include LICENSE
+include MANIFEST.in
+include README.md
+include CHANGELOG.md
+include CONTRIBUTING.md
+include SECURITY.md
+include THIRD_PARTY_NOTICES.md
+include docs/product/README.md
+include docs/product/01-author-note.md
+include docs/product/02-core-features.md
+include docs/product/03-user-guide.md
+include docs/product/04-reference-and-boundaries.md
+include docs/product/05-local-market-data-format-v1.md
+include examples/README.md
+include examples/market_data_v1/README.md
+include examples/market_data_v1/generate.py
+include examples/market_data_v1/data/diepi_dataset.json
+include examples/market_data_v1/data/parquet/metadata/etf/basic.parquet
+include examples/market_data_v1/data/parquet/metadata/stock/basic.parquet
+include examples/market_data_v1/data/parquet/timeseries/adj_factor/000001.SZ.parquet
+include examples/market_data_v1/data/parquet/timeseries/adj_factor/600000.SH.parquet
+include examples/market_data_v1/data/parquet/timeseries/daily/000001.SZ.parquet
+include examples/market_data_v1/data/parquet/timeseries/daily/600000.SH.parquet
+include examples/market_data_v1/data/parquet/timeseries/daily_raw/000001.SZ.parquet
+include examples/market_data_v1/data/parquet/timeseries/daily_raw/600000.SH.parquet
+include examples/market_data_v1/data/parquet/timeseries/etf_adj_factor/159915.SZ.parquet
+include examples/market_data_v1/data/parquet/timeseries/etf_adj_factor/510300.SH.parquet
+include examples/market_data_v1/data/parquet/timeseries/etf_daily/159915.SZ.parquet
+include examples/market_data_v1/data/parquet/timeseries/etf_daily/510300.SH.parquet
+include examples/market_data_v1/data/parquet/timeseries/etf_daily_raw/159915.SZ.parquet
+include examples/market_data_v1/data/parquet/timeseries/etf_daily_raw/510300.SH.parquet
+include examples/market_data_v1/data/parquet/timeseries/etf_minute/159915.SZ/2026.parquet
+include examples/market_data_v1/data/parquet/timeseries/etf_minute/510300.SH/2026.parquet
+include examples/market_data_v1/data/parquet/timeseries/etf_minute_raw/159915.SZ/2026.parquet
+include examples/market_data_v1/data/parquet/timeseries/etf_minute_raw/510300.SH/2026.parquet
+include examples/market_data_v1/data/parquet/timeseries/minute/000001.SZ/2026.parquet
+include examples/market_data_v1/data/parquet/timeseries/minute/600000.SH/2026.parquet
+include examples/market_data_v1/data/parquet/timeseries/minute_raw/000001.SZ/2026.parquet
+include examples/market_data_v1/data/parquet/timeseries/minute_raw/600000.SH/2026.parquet
+include pyproject.toml
+include requirements.txt
+include setup.py
+recursive-include diepi *.py
+recursive-include examples *.py
+recursive-include tests *.py
+recursive-include tools *.py *.txt
+global-exclude __pycache__
+global-exclude *.py[cod]

@@ -1,0 +1,16 @@
+# Core runtime
+pandas>=1.5
+numpy>=1.23
+pyarrow>=23.0.1
+
+# Optional GUI (not required for CLI-only use)
+PySide6>=6.10,<7
+pyqtgraph>=0.14,<0.15
+
+# Development and release checks
+pytest>=7
+build>=1.2,<2
+twine>=7,<8
+coverage[toml]>=7.6,<8
+pip-audit>=2.9,<3
+ruff>=0.12,<1

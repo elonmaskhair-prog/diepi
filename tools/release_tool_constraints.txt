@@ -1,0 +1,10 @@
+# Exact, cross-platform release-tool resolution reviewed on 2026-08-17.
+# Install with: python -m pip install -c tools/release_tool_constraints.txt ...
+# Runtime/GUI dependencies intentionally remain ranges in package metadata;
+# their wheels differ by Python and operating system and are audited after
+# resolution in CI rather than pretending one hash lock is portable.
+pip==26.2.1
+setuptools==84.0.0
+build==1.5.0
+twine==7.0.0
+pip-audit==2.10.1

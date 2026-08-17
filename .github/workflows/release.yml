@@ -1,0 +1,106 @@
+name: release artifacts
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PIP_CONSTRAINT: ${{ github.workspace }}/tools/release_tool_constraints.txt
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-attest:
+    name: build, verify, and attest
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Bootstrap the hash-pinned audited pip
+        run: python -m pip install -r tools/bootstrap_pip_requirements.txt
+      - name: Install the exact release toolchain
+        run: >-
+          python -m pip install --upgrade --only-binary=:all:
+          "setuptools>=77" -e ".[dev,gui]"
+      - name: Validate the public tree and links
+        run: |
+          python tools/check_public_tree.py --mode git --revision HEAD
+          python tools/check_markdown_links.py
+      - name: Audit the resolved release environment
+        run: |
+          python -m pip freeze --all --exclude-editable > "${RUNNER_TEMP}/diepi-resolved-release.txt"
+          python -m pip_audit --strict --disable-pip --no-deps -r "${RUNNER_TEMP}/diepi-resolved-release.txt"
+      - name: Build, inspect, check, and smoke-install artifacts
+        run: >-
+          python tools/build_release.py
+          --output-root .release-gate/publish
+      - name: Recheck package metadata with Twine
+        run: >-
+          python -m twine check
+          .release-gate/publish/run-*/dist/*.whl
+          .release-gate/publish/run-*/dist/*.tar.gz
+      - name: Attest wheel and sdist provenance
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            .release-gate/publish/run-*/dist/*.whl
+            .release-gate/publish/run-*/dist/*.tar.gz
+      - name: Upload wheel and sdist
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: distributions
+          path: |
+            .release-gate/publish/run-*/dist/*.whl
+            .release-gate/publish/run-*/dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload SHA-256 manifest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: distribution-checksums
+          path: .release-gate/publish/run-*/dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-pypi:
+    name: publish to PyPI through trusted publishing
+    needs: build-and-attest
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') &&
+      vars.DIEPI_PYPI_TRUSTED_PUBLISHING == 'enabled'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - name: Download verified distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: distributions
+          path: dist
+      - name: Publish with PyPI trusted publishing
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist/

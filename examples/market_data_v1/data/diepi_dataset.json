@@ -1,0 +1,324 @@
+{
+  "dataset_id": "diepi-local-market-data-v1-public-real-2026h1",
+  "dataset_kind": "user_supplied",
+  "end_date": "20260630",
+  "files": [
+    {
+      "columns": [
+        "delist_date",
+        "list_date",
+        "list_status",
+        "name",
+        "symbol",
+        "ts_code"
+      ],
+      "logical_sha256": "5ac4228798e15248e338ec2796845fadf8ba999de3cb434c13d8014d9659bb3d",
+      "path": "parquet/metadata/etf/basic.parquet",
+      "rows": 2
+    },
+    {
+      "columns": [
+        "delist_date",
+        "list_date",
+        "list_status",
+        "name",
+        "symbol",
+        "ts_code"
+      ],
+      "logical_sha256": "55c6bd7dfe31f461e881ef38030e5fc548b4f4447c8d044cfece8a581c9b307a",
+      "path": "parquet/metadata/stock/basic.parquet",
+      "rows": 2
+    },
+    {
+      "columns": [
+        "adj_factor",
+        "trade_date",
+        "ts_code"
+      ],
+      "logical_sha256": "4f482a9a6a787e82448d0ebc02cd7b87d3d9a29f70da39036ed6d8803984ee9f",
+      "path": "parquet/timeseries/adj_factor/000001.SZ.parquet",
+      "rows": 117
+    },
+    {
+      "columns": [
+        "adj_factor",
+        "trade_date",
+        "ts_code"
+      ],
+      "logical_sha256": "6d359ea9559afb247a3472bf5ba449babc7ad8d0887cb37d55057b2c36395a1e",
+      "path": "parquet/timeseries/adj_factor/600000.SH.parquet",
+      "rows": 117
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_date",
+        "ts_code"
+      ],
+      "logical_sha256": "ccc8055b6fb899bc2576c6d737d401eaf51286e7ce23065b1a5418131dee8c55",
+      "path": "parquet/timeseries/daily/000001.SZ.parquet",
+      "rows": 116
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_date",
+        "ts_code"
+      ],
+      "logical_sha256": "b281bf47b9659ca4dbbb8ca3d68aa46a00ee4908de132b0ae8b4eda252c09fea",
+      "path": "parquet/timeseries/daily/600000.SH.parquet",
+      "rows": 116
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_date",
+        "ts_code"
+      ],
+      "logical_sha256": "32a4075d2ee7a3cd597d3e3ba749c925bc8f1070358cb07e4c8f98be5a18496b",
+      "path": "parquet/timeseries/daily_raw/000001.SZ.parquet",
+      "rows": 116
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_date",
+        "ts_code"
+      ],
+      "logical_sha256": "e35c4cdc58426de345eb49fc8a5c6e9c4ea8b57cf06dd6a0514f0d77e87a34f1",
+      "path": "parquet/timeseries/daily_raw/600000.SH.parquet",
+      "rows": 116
+    },
+    {
+      "columns": [
+        "adj_factor",
+        "trade_date",
+        "ts_code"
+      ],
+      "logical_sha256": "3303330941160bd7b6755c17dab6053e4a9a47d693882a20dff19764fde7a049",
+      "path": "parquet/timeseries/etf_adj_factor/159915.SZ.parquet",
+      "rows": 117
+    },
+    {
+      "columns": [
+        "adj_factor",
+        "trade_date",
+        "ts_code"
+      ],
+      "logical_sha256": "e1c8cfde75e3509501ac7a8b88e585afb41288bcc78ca4efe704f1fd4cc684e6",
+      "path": "parquet/timeseries/etf_adj_factor/510300.SH.parquet",
+      "rows": 117
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_date",
+        "ts_code"
+      ],
+      "logical_sha256": "9180f346d00654eb465d04c5ccf8bb7a80bd4529d189ebfee927c9f87cb9d7e0",
+      "path": "parquet/timeseries/etf_daily/159915.SZ.parquet",
+      "rows": 116
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_date",
+        "ts_code"
+      ],
+      "logical_sha256": "034f4b633d9fb9512059254973cfce5b746c478cccc2cefc96ec40f513dc0e68",
+      "path": "parquet/timeseries/etf_daily/510300.SH.parquet",
+      "rows": 116
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_date",
+        "ts_code"
+      ],
+      "logical_sha256": "9180f346d00654eb465d04c5ccf8bb7a80bd4529d189ebfee927c9f87cb9d7e0",
+      "path": "parquet/timeseries/etf_daily_raw/159915.SZ.parquet",
+      "rows": 116
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_date",
+        "ts_code"
+      ],
+      "logical_sha256": "a4d7a6c94689b3dea07be65dced55a00bfb5309891f61d6846dd604a9c568a84",
+      "path": "parquet/timeseries/etf_daily_raw/510300.SH.parquet",
+      "rows": 116
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_time",
+        "ts_code"
+      ],
+      "logical_sha256": "4a089615eaec700e0c433a5e7cadc406582580a3d18d6ae3bb92cbf2d0e3294d",
+      "path": "parquet/timeseries/etf_minute/159915.SZ/2026.parquet",
+      "rows": 27956
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_time",
+        "ts_code"
+      ],
+      "logical_sha256": "e507db953316feb94f82ba78ab759f2582f05602b48fdf0546741a6058f46345",
+      "path": "parquet/timeseries/etf_minute/510300.SH/2026.parquet",
+      "rows": 27956
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_time",
+        "ts_code"
+      ],
+      "logical_sha256": "4a089615eaec700e0c433a5e7cadc406582580a3d18d6ae3bb92cbf2d0e3294d",
+      "path": "parquet/timeseries/etf_minute_raw/159915.SZ/2026.parquet",
+      "rows": 27956
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_time",
+        "ts_code"
+      ],
+      "logical_sha256": "f63c8cfb62371ef5a84a7333aa9d1f5075abb22d52c7b9934e76ff021f48610c",
+      "path": "parquet/timeseries/etf_minute_raw/510300.SH/2026.parquet",
+      "rows": 27956
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_time",
+        "ts_code"
+      ],
+      "logical_sha256": "514ec8d71ef576442bda7f9fd83654ecff4e78c5807704a3bb493ba41376b615",
+      "path": "parquet/timeseries/minute/000001.SZ/2026.parquet",
+      "rows": 27956
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_time",
+        "ts_code"
+      ],
+      "logical_sha256": "29423aa4620495ef245f2b9b1807f293e2840301cfca39c617efe2d8de0d3b7f",
+      "path": "parquet/timeseries/minute/600000.SH/2026.parquet",
+      "rows": 27956
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_time",
+        "ts_code"
+      ],
+      "logical_sha256": "40c4612ed8b598182070110e7b3cca586f945bf6a4a889113871c01c81bacc53",
+      "path": "parquet/timeseries/minute_raw/000001.SZ/2026.parquet",
+      "rows": 27956
+    },
+    {
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "pre_close",
+        "trade_time",
+        "ts_code"
+      ],
+      "logical_sha256": "a2295ff4490adc0a61435d6507c43f3fc8180320b9e81563d361419805ac224f",
+      "path": "parquet/timeseries/minute_raw/600000.SH/2026.parquet",
+      "rows": 27956
+    }
+  ],
+  "generator": "examples.market_data_v1.generate",
+  "generator_version": "2",
+  "manifest_sha256": "93e2a670851bca4ea7d0b3f55c302869a582729643e220c025cc461126592ad1",
+  "schema_version": 1,
+  "start_date": "20260101",
+  "symbols": [
+    "600000.SH",
+    "000001.SZ",
+    "510300.SH",
+    "159915.SZ"
+  ]
+}

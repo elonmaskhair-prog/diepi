@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "diepi"
+version = "0.1.0"
+description = "dieΠ（带派）：本地事件驱动 A 股回测框架，支持股票/ETF 与独立股指期货研究引擎"
+readme = {file = "README.md", content-type = "text/markdown"}
+authors = [{name = "diePi contributors"}]
+maintainers = [{name = "diePi maintainers"}]
+keywords = ["backtesting", "quantitative-finance", "a-shares", "event-driven", "local-first"]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+dependencies = [
+    "pandas>=1.5",
+    "numpy>=1.23",
+    "pyarrow>=23.0.1",
+]
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.10,<7", "pyqtgraph>=0.14,<0.15"]
+dev = [
+    "pytest>=7",
+    "build>=1.2,<2",
+    "twine>=7,<8",
+    "coverage[toml]>=7.6,<8",
+    "pip-audit>=2.9,<3",
+    "ruff>=0.12,<1",
+]
+
+[project.scripts]
+diepi = "diepi.cli:main"
+
+[tool.setuptools]
+include-package-data = false
+packages = [
+    "diepi",
+    "diepi.artifacts",
+    "diepi.backtest",
+    "diepi.backtest.broker",
+    "diepi.backtest.cli",
+    "diepi.backtest.comparison",
+    "diepi.backtest.data",
+    "diepi.backtest.engine",
+    "diepi.backtest.strategy",
+    "diepi.backtest.ui",
+    "diepi.backtest.ui.screens",
+    "diepi.backtest.ui.widgets",
+    "diepi.commands",
+    "diepi.demo",
+    "diepi.examples",
+    "diepi.futures",
+]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+testpaths = ["tests/backtest", "tests/futures"]
+markers = [
+    "integration: 依赖本地真实数据仓库的测试",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+exclude = [".release-gate", "build", "dist"]
+
+[tool.ruff.lint]
+# A deliberately narrow, zero-noise correctness gate for the first public
+# release.  Broader style normalization can happen independently later.
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.coverage.run]
+branch = true
+source = ["diepi"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
