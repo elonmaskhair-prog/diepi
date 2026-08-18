@@ -105,7 +105,33 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: distributions
-          path: dist
+          path: downloaded-distributions
+      - name: Download SHA-256 manifest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: distribution-checksums
+          path: downloaded-checksums
+      - name: Verify and stage distributions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' archives < <(
+            find downloaded-distributions -type f \
+              \( -name '*.whl' -o -name '*.tar.gz' \) -print0
+          )
+          mapfile -d '' manifests < <(
+            find downloaded-checksums -type f -name SHA256SUMS -print0
+          )
+          test "${#archives[@]}" -eq 2
+          test "${#manifests[@]}" -eq 1
+          source_dir="$(dirname "${archives[0]}")"
+          for archive in "${archives[@]}"; do
+            test "$(dirname "$archive")" = "$source_dir"
+          done
+          manifest_path="$(realpath "${manifests[0]}")"
+          (cd "$source_dir" && sha256sum --check "$manifest_path")
+          mkdir dist
+          cp -- "${archives[@]}" dist/
       - name: Publish with PyPI trusted publishing
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
