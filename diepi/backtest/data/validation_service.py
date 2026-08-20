@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
@@ -20,6 +21,13 @@ from .dataset_manifest import (
     DATASET_MANIFEST_FILENAME,
     DatasetManifest,
     logical_frame_sha256,
+)
+from .plain_files import (
+    DATASET_PARQUET_MAX_BYTES,
+    METADATA_PARQUET_MAX_BYTES,
+    TRADE_CALENDAR_PARQUET_MAX_BYTES,
+    plain_file_exists,
+    read_plain_parquet,
 )
 from ..instruments import is_exchange_fund
 
@@ -216,9 +224,24 @@ def _issue_sort_key(issue: ValidationIssue):
     )
 
 
-def _validate_calendar(path: Path, scope: DataValidationScope):
+def _validate_calendar(
+    path: Path,
+    scope: DataValidationScope,
+    *,
+    data_root: Path,
+):
     issues = []
-    source = "local_override" if path.exists() else "bundled"
+    presence_error = None
+    try:
+        local_override_exists = plain_file_exists(
+            path,
+            root=data_root,
+            label="local trade-calendar override",
+        )
+    except Exception as exc:
+        local_override_exists = True
+        presence_error = exc
+    source = "local_override" if local_override_exists else "bundled"
     result: Dict[str, Any] = {
         "status": "fail",
         "source": source,
@@ -230,18 +253,24 @@ def _validate_calendar(path: Path, scope: DataValidationScope):
         "last_date": None,
         "open_days_in_scope": 0,
     }
-    if path.exists():
-        if not path.is_file():
-            issues.append(
-                ValidationIssue(
-                    "error",
-                    "TRADE_CALENDAR_READ_ERROR",
-                    "local trade-calendar override exists but is not a file",
-                )
+    if presence_error is not None:
+        issues.append(
+            ValidationIssue(
+                "error",
+                "TRADE_CALENDAR_READ_ERROR",
+                "local trade-calendar override could not be read: "
+                f"{type(presence_error).__name__}: {presence_error}",
             )
-            return result, frozenset(), issues
+        )
+        return result, frozenset(), issues
+    if local_override_exists:
         try:
-            frame = pd.read_parquet(path)
+            frame = read_plain_parquet(
+                path,
+                root=data_root,
+                max_bytes=TRADE_CALENDAR_PARQUET_MAX_BYTES,
+                label="local trade-calendar override",
+            )
         except Exception as exc:
             issues.append(
                 ValidationIssue(
@@ -418,7 +447,21 @@ def _validate_basic_metadata_file(
 
     issues = []
     path = root / "parquet" / "metadata" / relative_path
-    if not path.is_file():
+    try:
+        metadata_exists = plain_file_exists(
+            path,
+            root=root,
+            label=f"{relative_path} metadata",
+        )
+    except Exception as exc:
+        return [
+            ValidationIssue(
+                "warning",
+                f"{issue_prefix}_READ_ERROR",
+                f"{relative_path} could not be inspected: {type(exc).__name__}: {exc}",
+            )
+        ]
+    if not metadata_exists:
         return [
             ValidationIssue(
                 "warning",
@@ -427,7 +470,12 @@ def _validate_basic_metadata_file(
             )
         ]
     try:
-        frame = pd.read_parquet(path)
+        frame = read_plain_parquet(
+            path,
+            root=root,
+            max_bytes=METADATA_PARQUET_MAX_BYTES,
+            label=f"{relative_path} metadata",
+        )
     except Exception as exc:
         return [
             ValidationIssue(
@@ -502,11 +550,11 @@ def _validate_instrument_basic(root: Path, scope: DataValidationScope):
 
 def _verify_manifest(root: Path):
     path = root / DATASET_MANIFEST_FILENAME
-    if not path.is_file():
+    if not os.path.lexists(path):
         return "absent", None, "user_supplied_unmanifested", [], None
     issues = []
     try:
-        manifest = DatasetManifest.read(path)
+        manifest = DatasetManifest.read(path, root=root)
     except Exception as exc:
         issues.append(
             ValidationIssue(
@@ -518,20 +566,8 @@ def _verify_manifest(root: Path):
         return "failed", None, "unknown", issues, None
 
     for identity in manifest.files:
-        file_path = (root / identity.path).resolve()
-        try:
-            file_path.relative_to(root)
-        except ValueError:
-            issues.append(
-                ValidationIssue(
-                    "error",
-                    "DATASET_MANIFEST_PATH_ESCAPE",
-                    "dataset manifest path escapes the data root",
-                    sample_keys=(identity.path,),
-                )
-            )
-            continue
-        if not file_path.is_file():
+        file_path = root.joinpath(*Path(identity.path).parts)
+        if not os.path.lexists(file_path):
             issues.append(
                 ValidationIssue(
                     "error",
@@ -542,7 +578,12 @@ def _verify_manifest(root: Path):
             )
             continue
         try:
-            frame = pd.read_parquet(file_path)
+            frame = read_plain_parquet(
+                file_path,
+                root=root,
+                max_bytes=DATASET_PARQUET_MAX_BYTES,
+                label=f"dataset member {identity.path}",
+            )
             logical_hash = logical_frame_sha256(frame)
         except Exception as exc:
             issues.append(
@@ -661,6 +702,7 @@ def validate_local_data(
     calendar, open_days, calendar_issues = _validate_calendar(
         root / "parquet" / "metadata" / "common" / "trade_cal.parquet",
         scope,
+        data_root=root,
     )
     issues.extend(calendar_issues)
     issues.extend(_validate_instrument_basic(root, scope))

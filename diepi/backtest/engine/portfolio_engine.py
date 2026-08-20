@@ -616,6 +616,7 @@ class PortfolioEngine:
         frequency: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        require_direct_prices: bool = True,
     ) -> None:
         if isinstance(symbols, (str, bytes)):
             raise TypeError("market symbols must be an iterable of strings")
@@ -632,11 +633,15 @@ class PortfolioEngine:
         # The external observer must freeze inputs before the provider reads
         # them.  Commit the realized scope only after that succeeds.
         if self.market_data_observer is not None:
+            kwargs = {
+                "frequency": frequency,
+                "start_date": start_date,
+                "end_date": end_date,
+            }
+            if not require_direct_prices:
+                kwargs["require_direct_prices"] = False
             incomplete = self.market_data_observer(
-                tuple(sorted(observed)),
-                frequency=frequency,
-                start_date=start_date,
-                end_date=end_date,
+                tuple(sorted(observed)), **kwargs
             )
             if incomplete is not None:
                 if isinstance(incomplete, (str, bytes)):

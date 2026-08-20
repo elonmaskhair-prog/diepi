@@ -1,5 +1,6 @@
 import os
 import shutil
+import stat
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -1553,14 +1554,21 @@ def test_unsupported_direct_link_and_alternate_file_route_identically(
     alternate = root / 'daily_raw' / '000001_SZ.parquet'
     _write_daily_parquet(alternate, close=20.0)
     if unsupported_kind == 'symlink':
-        real_is_symlink = Path.is_symlink
+        real_lstat = Path.lstat
 
-        def simulated_is_symlink(path):
+        def simulated_symlink_lstat(path):
+            value = real_lstat(path)
             if path == canonical:
-                return True
-            return real_is_symlink(path)
+                return SimpleNamespace(
+                    st_mode=stat.S_IFLNK | 0o777,
+                    st_file_attributes=getattr(
+                        value, 'st_file_attributes', 0
+                    ),
+                    st_nlink=getattr(value, 'st_nlink', 1),
+                )
+            return value
 
-        monkeypatch.setattr(Path, 'is_symlink', simulated_is_symlink)
+        monkeypatch.setattr(Path, 'lstat', simulated_symlink_lstat)
     else:
         real_lstat = Path.lstat
 

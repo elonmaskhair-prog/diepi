@@ -13,10 +13,29 @@ from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
+from .plain_files import (
+    DATASET_MANIFEST_MAX_BYTES,
+    DATASET_MANIFEST_MAX_FILES,
+    DATASET_PARQUET_MAX_BYTES,
+    read_plain_bytes,
+    read_plain_parquet,
+)
+
 
 DATASET_MANIFEST_FILENAME = "diepi_dataset.json"
 DATASET_MANIFEST_SCHEMA_VERSION = 1
 DATASET_KINDS = frozenset({"synthetic_demo", "user_supplied"})
+DATASET_MANIFEST_MAX_PATH_BYTES = 1024
+_WINDOWS_RESERVED_BASENAMES = frozenset(
+    {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{index}" for index in range(1, 10)),
+        *(f"LPT{index}" for index in range(1, 10)),
+    }
+)
 
 
 def _canonical_json(value: Any) -> str:
@@ -88,9 +107,25 @@ def logical_frame_sha256(frame: pd.DataFrame) -> str:
 def _relative_manifest_path(value: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError("manifest file path must be a non-empty string")
+    encoded = value.encode("utf-8")
+    if (
+        len(encoded) > DATASET_MANIFEST_MAX_PATH_BYTES
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    ):
+        raise ValueError("manifest file path exceeds its portable safety contract")
     path = PurePosixPath(value.replace("\\", "/"))
     if path.is_absolute() or ".." in path.parts or "." in path.parts:
-        raise ValueError(f"manifest file path must stay below data root: {value}")
+        raise ValueError("manifest file path must stay below data root")
+    for part in path.parts:
+        if len(part.encode("utf-8")) > 255:
+            raise ValueError("manifest file path component exceeds its safety limit")
+        if any(character in '<>:"|?*' for character in part) or part.endswith(
+            (" ", ".")
+        ):
+            raise ValueError("manifest file path exceeds its portable safety contract")
+        basename = part.split(".", 1)[0].upper()
+        if basename in _WINDOWS_RESERVED_BASENAMES:
+            raise ValueError("manifest file path exceeds its portable safety contract")
     return path.as_posix()
 
 
@@ -188,9 +223,15 @@ class DatasetManifest:
         files = tuple(self.files)
         if not files or any(not isinstance(value, DatasetFileIdentity) for value in files):
             raise ValueError("files must contain DatasetFileIdentity values")
+        if len(files) > DATASET_MANIFEST_MAX_FILES:
+            raise ValueError(
+                "dataset manifest exceeds the reviewed file-count safety limit"
+            )
         paths = [value.path for value in files]
         if len(set(paths)) != len(paths):
             raise ValueError("manifest file paths must be unique")
+        if len({path.casefold() for path in paths}) != len(paths):
+            raise ValueError("manifest file paths must be portable-case unique")
         object.__setattr__(self, "files", tuple(sorted(files, key=lambda item: item.path)))
 
     def _payload(self) -> Dict[str, Any]:
@@ -251,8 +292,19 @@ class DatasetManifest:
         return manifest
 
     @classmethod
-    def read(cls, path) -> "DatasetManifest":
-        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    def read(cls, path, *, root=None) -> "DatasetManifest":
+        target = Path(path).expanduser().absolute()
+        trusted_root = target.parent if root is None else root
+        raw = read_plain_bytes(
+            target,
+            root=trusted_root,
+            max_bytes=DATASET_MANIFEST_MAX_BYTES,
+            label="dataset manifest",
+        )
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("dataset manifest must be valid UTF-8 JSON") from exc
         return cls.from_dict(payload)
 
     def write(self, path) -> Path:
@@ -266,13 +318,14 @@ def identify_parquet_file(data_root, relative_path: str) -> DatasetFileIdentity:
     """Read one Parquet file and return its stable logical identity."""
 
     canonical = _relative_manifest_path(relative_path)
-    root = Path(data_root).expanduser().resolve()
-    path = (root / PurePosixPath(canonical)).resolve()
-    try:
-        path.relative_to(root)
-    except ValueError as exc:
-        raise ValueError("manifest path escapes data root") from exc
-    frame = pd.read_parquet(path)
+    root = Path(data_root).expanduser().absolute()
+    path = root.joinpath(*PurePosixPath(canonical).parts)
+    frame = read_plain_parquet(
+        path,
+        root=root,
+        max_bytes=DATASET_PARQUET_MAX_BYTES,
+        label=f"dataset member {canonical}",
+    )
     return DatasetFileIdentity(
         path=canonical,
         rows=len(frame),
@@ -311,6 +364,7 @@ def build_dataset_manifest(
 __all__ = [
     "DATASET_KINDS",
     "DATASET_MANIFEST_FILENAME",
+    "DATASET_MANIFEST_MAX_PATH_BYTES",
     "DATASET_MANIFEST_SCHEMA_VERSION",
     "DatasetFileIdentity",
     "DatasetManifest",

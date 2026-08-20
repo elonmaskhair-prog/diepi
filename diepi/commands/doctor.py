@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional, Sequence, Tuple
 from .. import __version__
 from ..backtest.data.calendar import builtin_calendar_identity
 from ..backtest.data.cache_manager import CacheManager
+from ..backtest.data.plain_files import plain_file_exists
 from ..runtime import RuntimePaths
 
 
@@ -269,38 +270,50 @@ def run_doctor(
             )
         )
         local_calendar = paths.metadata_root / "common" / "trade_cal.parquet"
-        if local_calendar.exists():
-            try:
-                if not local_calendar.is_file():
-                    raise ValueError(
-                        "local trade-calendar override exists but is not a file"
-                    )
-                identity = CacheManager(
-                    data_root=paths.data_root
-                ).trade_calendar_identity
-            except Exception as exc:
-                checks.append(
-                    DoctorCheck(
-                        name="trade_calendar",
-                        status="fail",
-                        message="local trade-calendar override failed strict validation",
-                        value=f"{type(exc).__name__}: {exc}",
-                    )
+        try:
+            local_calendar_exists = plain_file_exists(
+                local_calendar,
+                root=paths.data_root,
+                label="local trade-calendar override",
+            )
+        except Exception as exc:
+            checks.append(
+                DoctorCheck(
+                    name="trade_calendar",
+                    status="fail",
+                    message="local trade-calendar override failed strict validation",
+                    value=f"{type(exc).__name__}: {exc}",
                 )
-            else:
-                checks.append(
-                    DoctorCheck(
-                        name="trade_calendar",
-                        status="pass",
-                        message="local trade-calendar override is valid and takes precedence",
-                        value=(
-                            f"{identity.calendar_id} "
-                            f"{identity.coverage_start}..{identity.coverage_end}"
-                        ),
-                    )
-                )
+            )
         else:
-            checks.append(_builtin_calendar_check())
+            if local_calendar_exists:
+                try:
+                    identity = CacheManager(
+                        data_root=paths.data_root
+                    ).trade_calendar_identity
+                except Exception as exc:
+                    checks.append(
+                        DoctorCheck(
+                            name="trade_calendar",
+                            status="fail",
+                            message="local trade-calendar override failed strict validation",
+                            value=f"{type(exc).__name__}: {exc}",
+                        )
+                    )
+                else:
+                    checks.append(
+                        DoctorCheck(
+                            name="trade_calendar",
+                            status="pass",
+                            message="local trade-calendar override is valid and takes precedence",
+                            value=(
+                                f"{identity.calendar_id} "
+                                f"{identity.coverage_start}..{identity.coverage_end}"
+                            ),
+                        )
+                    )
+            else:
+                checks.append(_builtin_calendar_check())
         required_paths = (
             (
                 "timeseries_root",

@@ -29,7 +29,18 @@ from .calendar import (
     identify_trade_calendar,
     load_builtin_trade_calendar,
 )
-from ..config import ONECSV_DIR, PARQUET_ROOT, METADATA_ROOT
+from .plain_files import (
+    METADATA_PARQUET_MAX_BYTES,
+    TRADE_CALENDAR_PARQUET_MAX_BYTES,
+    plain_file_exists,
+    read_plain_parquet,
+)
+from ..config import (
+    DATA_ROOT as DEFAULT_DATA_ROOT,
+    METADATA_ROOT,
+    ONECSV_DIR,
+    PARQUET_ROOT,
+)
 from ..instruments import is_exchange_fund
 
 logger = logging.getLogger(__name__)
@@ -76,27 +87,61 @@ def is_supported_direct_parquet_file(path, *, root=None) -> bool:
     different path from the one actually read.
     """
 
-    candidate = Path(path)
-    if root is not None:
-        try:
-            candidate.resolve(strict=False).relative_to(
-                Path(root).resolve(strict=False)
-            )
-        except (OSError, ValueError):
-            return False
+    return _is_supported_direct_path(path, root=root, expect_directory=False)
+
+
+def is_supported_direct_parquet_directory(path, *, root=None) -> bool:
+    """Return whether a direct-source directory has a link-free ancestry."""
+
+    return _is_supported_direct_path(path, root=root, expect_directory=True)
+
+
+def _is_supported_direct_path(path, *, root, expect_directory: bool) -> bool:
+    candidate = Path(os.path.abspath(os.fspath(Path(path).expanduser())))
+    trusted_root = (
+        candidate.parent
+        if root is None
+        else Path(os.path.abspath(os.fspath(Path(root).expanduser())))
+    )
     try:
-        info = candidate.lstat()
-    except OSError:
+        relative = candidate.relative_to(trusted_root)
+        root_info = trusted_root.lstat()
+    except (OSError, ValueError):
         return False
     reparse_flag = getattr(
         stat_module, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x0400
     )
-    file_attributes = getattr(info, 'st_file_attributes', 0)
-    return (
-        stat_module.S_ISREG(info.st_mode)
-        and not candidate.is_symlink()
-        and not (file_attributes & reparse_flag)
-    )
+    if (
+        not stat_module.S_ISDIR(root_info.st_mode)
+        or stat_module.S_ISLNK(root_info.st_mode)
+        or getattr(root_info, 'st_file_attributes', 0) & reparse_flag
+    ):
+        return False
+    current = trusted_root
+    if not relative.parts:
+        return expect_directory
+    for index, part in enumerate(relative.parts):
+        current = current / part
+        try:
+            info = current.lstat()
+        except OSError:
+            return False
+        if (
+            stat_module.S_ISLNK(info.st_mode)
+            or getattr(info, 'st_file_attributes', 0) & reparse_flag
+        ):
+            return False
+        leaf = index == len(relative.parts) - 1
+        if not leaf and not stat_module.S_ISDIR(info.st_mode):
+            return False
+        if leaf:
+            if expect_directory:
+                return stat_module.S_ISDIR(info.st_mode)
+            return (
+                stat_module.S_ISREG(info.st_mode)
+                and getattr(info, 'st_nlink', 1) == 1
+            )
+    return False
 
 
 @dataclass
@@ -154,6 +199,13 @@ class CacheConfig:
     ETF_CROSS_SECTION_DIR: str = '../section/etf_daily'       # 后复权ETF截面
     ETF_SECTION_RAW_DIR: str = '../section/etf_daily_raw'     # 不复权ETF截面
 
+    # When paths came from one explicit data root, retain that lexical trust
+    # boundary so metadata reads also inspect every intermediate component.
+    # Kept last to preserve the positional order of the historical fields.
+    # ``None`` retains the custom-config contract, where the caller explicitly
+    # designates METADATA_ROOT as the trusted root.
+    DATA_ROOT: Optional[Path] = None
+
     @classmethod
     def from_data_root(cls, data_root) -> "CacheConfig":
         """Build an isolated cache configuration for one explicit data root."""
@@ -165,6 +217,7 @@ class CacheConfig:
             ONECSV_DIR=paths.data_root / 'onecsv',
             PARQUET_ROOT=paths.parquet_root,
             METADATA_ROOT=paths.metadata_root,
+            DATA_ROOT=paths.data_root,
         )
 
 class MemoryCache:
@@ -261,6 +314,9 @@ class ParquetReader:
         self._config = config
         self._lock = threading.RLock()
 
+    def _trust_root(self) -> Path:
+        return Path(self._config.DATA_ROOT or self._config.PARQUET_ROOT)
+
     def _is_minute_category(self, category: str) -> bool:
         """判断是否为分钟数据类别"""
         return category in ('minute_data', 'minute_data_raw')
@@ -286,8 +342,12 @@ class ParquetReader:
     def _category_root(self, parquet_dir: str) -> Path:
         """Resolve one configured category without leaving PARQUET_ROOT."""
 
-        parquet_root = Path(self._config.PARQUET_ROOT).resolve(strict=False)
-        category_root = (parquet_root / parquet_dir).resolve(strict=False)
+        parquet_root = Path(
+            os.path.abspath(os.fspath(Path(self._config.PARQUET_ROOT).expanduser()))
+        )
+        category_root = Path(
+            os.path.abspath(os.fspath(parquet_root / parquet_dir))
+        )
         try:
             category_root.relative_to(parquet_root)
         except ValueError as exc:
@@ -300,7 +360,7 @@ class ParquetReader:
         category_root = self._category_root(parquet_dir)
         path = category_root / f"{candidate}.parquet"
         try:
-            path.resolve(strict=False).relative_to(category_root)
+            Path(os.path.abspath(os.fspath(path))).relative_to(category_root)
         except ValueError as exc:
             raise CacheError("market-data file escapes its category root") from exc
         return path
@@ -309,7 +369,7 @@ class ParquetReader:
         category_root = self._category_root(parquet_dir)
         path = category_root / candidate
         try:
-            path.resolve(strict=False).relative_to(category_root)
+            Path(os.path.abspath(os.fspath(path))).relative_to(category_root)
         except ValueError as exc:
             raise CacheError("minute symbol directory escapes its category root") from exc
         return path
@@ -374,7 +434,7 @@ class ParquetReader:
             parquet_path = self._single_file_path(parquet_dir, candidate)
             last_path = parquet_path
             if not is_supported_direct_parquet_file(
-                parquet_path, root=self._category_root(parquet_dir)
+                parquet_path, root=self._trust_root()
             ):
                 continue
             try:
@@ -405,19 +465,8 @@ class ParquetReader:
         symbol_dir = None
         for candidate in self._symbol_path_candidates(symbol):
             trial_dir = self._minute_symbol_path(parquet_dir, candidate)
-            try:
-                info = trial_dir.lstat()
-            except OSError:
-                continue
-            if (
-                stat_module.S_ISDIR(info.st_mode)
-                and not trial_dir.is_symlink()
-                and not (
-                    getattr(info, 'st_file_attributes', 0)
-                    & getattr(
-                        stat_module, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x0400
-                    )
-                )
+            if is_supported_direct_parquet_directory(
+                trial_dir, root=self._trust_root()
             ):
                 symbol_dir = trial_dir
                 break
@@ -443,7 +492,7 @@ class ParquetReader:
                 ):
                     continue
                 if not is_supported_direct_parquet_file(
-                    f, root=symbol_dir
+                    f, root=self._trust_root()
                 ):
                     raise CacheError(
                         f"Unsupported minute Parquet member: {f.name}"
@@ -533,7 +582,7 @@ class ParquetReader:
                         )
                         if is_supported_direct_parquet_file(
                             parquet_path,
-                            root=self._category_root(parquet_dir),
+                            root=self._trust_root(),
                         ):
                             return True
                 etf_subdir = self._config.ETF_SECTION_RAW_DIR if category == 'daily_data_raw' else self._config.ETF_CROSS_SECTION_DIR
@@ -548,8 +597,12 @@ class ParquetReader:
                     symbol_dir = self._minute_symbol_path(
                         parquet_dir, candidate
                     )
-                    if symbol_dir.is_dir() and any(
-                        is_supported_direct_parquet_file(f, root=symbol_dir)
+                    if is_supported_direct_parquet_directory(
+                        symbol_dir, root=self._trust_root()
+                    ) and any(
+                        is_supported_direct_parquet_file(
+                            f, root=self._trust_root()
+                        )
                         for f in symbol_dir.glob("*.parquet")
                     ):
                         return True
@@ -564,7 +617,7 @@ class ParquetReader:
                     )
                     if is_supported_direct_parquet_file(
                         parquet_path,
-                        root=self._category_root(parquet_dir),
+                        root=self._trust_root(),
                     ):
                         return True
                 return False
@@ -575,13 +628,14 @@ class ParquetReader:
 
         if self._is_minute_category(category):
             return any(
-                self._minute_symbol_path(parquet_dir, candidate).is_dir()
+                is_supported_direct_parquet_directory(
+                    self._minute_symbol_path(parquet_dir, candidate),
+                    root=self._trust_root(),
+                )
                 and any(
                     is_supported_direct_parquet_file(
                         f,
-                        root=self._minute_symbol_path(
-                            parquet_dir, candidate
-                        ),
+                        root=self._trust_root(),
                     )
                     for f in self._minute_symbol_path(
                         parquet_dir, candidate
@@ -593,7 +647,7 @@ class ParquetReader:
             return any(
                 is_supported_direct_parquet_file(
                     self._single_file_path(parquet_dir, candidate),
-                    root=self._category_root(parquet_dir),
+                    root=self._trust_root(),
                 )
                 for candidate in self._symbol_path_candidates(symbol)
             )
@@ -645,7 +699,8 @@ class CacheManager:
                 )
         self._config = config or (
             CacheConfig.from_data_root(data_root)
-            if data_root is not None else CacheConfig()
+            if data_root is not None
+            else CacheConfig(DATA_ROOT=Path(DEFAULT_DATA_ROOT))
         )
         self._memory = MemoryCache(self._config.LRU_MAX_SIZE)
         self._parquet = ParquetReader(self._config)
@@ -685,7 +740,22 @@ class CacheManager:
             return pd.DataFrame()
 
         parquet_path = self._config.METADATA_ROOT / parquet_file
-        if not parquet_path.exists():
+        metadata_root = self._config.DATA_ROOT or self._config.METADATA_ROOT
+        try:
+            metadata_exists = plain_file_exists(
+                parquet_path,
+                root=metadata_root,
+                label=f"{category} metadata",
+            )
+        except Exception as e:
+            if category == 'trade_cal':
+                raise DataNotFoundError(
+                    "local trade-calendar override failed strict validation: "
+                    f"{type(e).__name__}: {e}"
+                ) from e
+            logger.error("Metadata path failed strict validation: %s", category)
+            return pd.DataFrame()
+        if not metadata_exists:
             if category == 'trade_cal':
                 frame = load_builtin_trade_calendar()
                 self._trade_calendar_identity = builtin_calendar_identity()
@@ -698,17 +768,18 @@ class CacheManager:
             logger.error(f"Please run the data update scripts to generate Parquet files")
             return pd.DataFrame()
 
-        if not parquet_path.is_file():
-            if category == 'trade_cal':
-                raise DataNotFoundError(
-                    "local trade-calendar override exists but is not a file: "
-                    f"{parquet_path}"
-                )
-            logger.error(f"Metadata path is not a file: {parquet_path}")
-            return pd.DataFrame()
-
         try:
-            frame = pd.read_parquet(parquet_path)
+            max_bytes = (
+                TRADE_CALENDAR_PARQUET_MAX_BYTES
+                if category == 'trade_cal'
+                else METADATA_PARQUET_MAX_BYTES
+            )
+            frame = read_plain_parquet(
+                parquet_path,
+                root=metadata_root,
+                max_bytes=max_bytes,
+                label=f"{category} metadata",
+            )
             if category == 'trade_cal':
                 # File presence means complete replacement, never a partial
                 # merge with bundled dates.  Invalid/stale overrides fail

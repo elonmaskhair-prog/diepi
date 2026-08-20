@@ -175,15 +175,18 @@ class PortfolioContext(PriceModeMixin):
         frequency: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        require_direct_prices: bool = True,
     ) -> None:
         callback = self._market_data_observer
         if callback is not None:
-            callback(
-                tuple(symbols),
-                frequency=frequency,
-                start_date=start_date,
-                end_date=end_date,
-            )
+            kwargs = {
+                "frequency": frequency,
+                "start_date": start_date,
+                "end_date": end_date,
+            }
+            if not require_direct_prices:
+                kwargs["require_direct_prices"] = False
+            callback(tuple(symbols), **kwargs)
 
     def _set_result_warning_callback(
         self, callback: Optional[Callable[[str, str], None]]
@@ -1156,6 +1159,13 @@ class PortfolioContext(PriceModeMixin):
             raise ValueError("symbol is required")
 
         start, end = self._resolve_daily_range(days, start_date, end_date)
+        self._observe_market_data(
+            (symbol,),
+            frequency="daily",
+            start_date=start,
+            end_date=end,
+            require_direct_prices=False,
+        )
         return self._data.get_cyq(symbol, start=start, end=end)
 
     def get_moneyflow(self, symbol: str, days: int = None,
@@ -1178,6 +1188,13 @@ class PortfolioContext(PriceModeMixin):
             raise ValueError("symbol is required")
 
         start, end = self._resolve_daily_range(days, start_date, end_date)
+        self._observe_market_data(
+            (symbol,),
+            frequency="daily",
+            start_date=start,
+            end_date=end,
+            require_direct_prices=False,
+        )
         return self._data.get_moneyflow(symbol, start=start, end=end)
 
     def get_margin(self, symbol: str, days: int = None,
@@ -1200,6 +1217,13 @@ class PortfolioContext(PriceModeMixin):
             raise ValueError("symbol is required")
 
         start, end = self._resolve_daily_range(days, start_date, end_date)
+        self._observe_market_data(
+            (symbol,),
+            frequency="daily",
+            start_date=start,
+            end_date=end,
+            require_direct_prices=False,
+        )
         return self._data.get_margin(symbol, start=start, end=end)
 
     def get_basic(self, symbol: str, days: int = None,
@@ -1224,6 +1248,13 @@ class PortfolioContext(PriceModeMixin):
             raise ValueError("symbol is required")
 
         start, end = self._resolve_daily_range(days, start_date, end_date)
+        self._observe_market_data(
+            (symbol,),
+            frequency="daily",
+            start_date=start,
+            end_date=end,
+            require_direct_prices=False,
+        )
         return self._data.get_basic(symbol, start=start, end=end, fields=fields)
 
     def get_stock_info(self, symbol: str = None) -> pd.DataFrame:

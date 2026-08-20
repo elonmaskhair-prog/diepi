@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "diepi"
-version = "0.1.0"
+version = "0.1.1"
 description = "dieΠ（带派）：本地事件驱动 A 股回测框架，支持股票/ETF 与独立股指期货研究引擎"
 readme = {file = "README.md", content-type = "text/markdown"}
 authors = [{name = "diePi contributors"}]
@@ -26,6 +26,13 @@ dependencies = [
     "numpy>=1.23",
     "pyarrow>=23.0.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/elonmaskhair-prog/diepi"
+Repository = "https://github.com/elonmaskhair-prog/diepi"
+Issues = "https://github.com/elonmaskhair-prog/diepi/issues"
+Changelog = "https://github.com/elonmaskhair-prog/diepi/blob/main/CHANGELOG.md"
+Security = "https://github.com/elonmaskhair-prog/diepi/security/policy"
 
 [project.optional-dependencies]
 gui = ["PySide6>=6.10,<7", "pyqtgraph>=0.14,<0.15"]

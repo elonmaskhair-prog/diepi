@@ -99,6 +99,21 @@ def test_source_fingerprint_rejects_handle_generation_change(
         )
 
 
+def test_source_fingerprint_rejects_a_hard_link(tmp_path):
+    target = tmp_path / "target.bin"
+    target.write_bytes(b"shared-source")
+    link = tmp_path / "source.bin"
+    try:
+        os.link(target, link)
+    except OSError:
+        pytest.skip("hard links are unavailable on this platform")
+
+    with pytest.raises(ValueError, match="single-link regular file"):
+        SourceFingerprint.from_file(
+            link, root=tmp_path, kind="market_data"
+        )
+
+
 def _contract():
     return ResultContract(
         status=ResultStatus.SUCCESS,

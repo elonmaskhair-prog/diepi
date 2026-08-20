@@ -366,7 +366,8 @@ def test_builder_is_idempotent_and_refuses_source_or_output_ambiguity(tmp_path):
     generator = GENERATOR.read_text(encoding="utf-8")
     for statement in (
         "真实历史行情切片",
-        "项目所有者已",
+        "维护者决定继续",
+        "不是第三方再分发授权证明",
         "不构成投资建议",
         "本地只读切片构建器",
         "不访问网络",

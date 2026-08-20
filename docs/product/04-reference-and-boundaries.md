@@ -1,6 +1,6 @@
 # dieΠ 精准参考与能力边界
 
-> 适用于当前 `0.1.0` 代码树（[`pyproject.toml:7 — project.version`](../../pyproject.toml#L7)），校对日期：2026-08-16。
+> 适用于当前 `0.1.1` 代码树（[`pyproject.toml:7 — project.version`](../../pyproject.toml#L7)），校对日期：2026-08-20。
 > 本文是“查精确契约”的参考页，不是功能路线图。源码链接的行号对应本文编写时的工作树；以后若代码移动，请优先按链接中的稳定类名、函数名或常量名搜索。
 
 > 文档导航：[项目首页](../../README.md) · [目录](README.md) · [作者序（可选）](../../README.md#写在项目前为什么做-dieπ) ·
@@ -397,7 +397,7 @@ Python 调用方显式保存，而不是重命名、复制或手工补一个 man
 - **日线竞价**：可执行，但使用者必须提供因果安全的容量假设；引擎不猜当日竞价成交额。见 [`diepi/backtest/liquidity.py:106 — DailyAuctionLiquidityPolicy`](../../diepi/backtest/liquidity.py#L106)。
 - **复权公司行为**：是因子总回报再投资假设，不是公告/税批次引擎。见 [`diepi/backtest/engine/price_mode.py:12 — PriceModeMixin`](../../diepi/backtest/engine/price_mode.py#L12)。
 - **股指期货**：仅日线、独立、近似研究账户；详见第 9 节和 [`diepi/futures/result.py:23 — DEFAULT_ASSUMPTIONS`](../../diepi/futures/result.py#L23)。
-- **版本标识**：发行元数据、Python 包、CLI 归档和 GUI 当前统一显示 `0.1.0`。版本号仍
+- **版本标识**：发行元数据、Python 包、CLI 归档和 GUI 当前统一显示 `0.1.1`。版本号仍
   不能单独证明源码与数据快照，严谨复现还应记录首次公开后的 Git commit 或安装工件 hash。见
   [`pyproject.toml:7 — project.version`](../../pyproject.toml#L7)、
   [`diepi/__init__.py:3 — __version__`](../../diepi/__init__.py#L3)、

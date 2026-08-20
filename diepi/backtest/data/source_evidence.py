@@ -16,8 +16,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from io import BytesIO
+import json
 from pathlib import Path, PurePosixPath
-import stat
 from threading import RLock
 from typing import Iterable, Mapping, Optional, Sequence, Tuple
 
@@ -26,17 +26,55 @@ import pandas as pd
 from diepi.artifacts import RunProvenance, SourceFingerprint
 
 from .cache_manager import (
+    is_supported_direct_parquet_directory,
     is_supported_direct_parquet_file,
     normalize_data_symbol,
 )
+from .calendar import TradeCalendarIdentity
 from ..instruments import is_exchange_fund
 
 
 MARKET_DATA_SOURCE_KIND = "market_data_file"
+RUNTIME_METADATA_SOURCE_KIND = "market_metadata_file"
+TRADE_CALENDAR_SOURCE_KIND = "trade_calendar"
 PRICE_MODES = frozenset({"dual", "hfq", "raw"})
 MINUTE_FREQUENCIES = frozenset(
     {"minute", "1min", "5min", "15min", "30min", "60min"}
 )
+
+
+def trade_calendar_fingerprint(identity: TradeCalendarIdentity) -> SourceFingerprint:
+    """Represent the exact parsed market clock as artifact provenance evidence."""
+
+    if not isinstance(identity, TradeCalendarIdentity):
+        raise TypeError("identity must be a TradeCalendarIdentity")
+    payload = json.dumps(
+        identity.to_dict(),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return SourceFingerprint.from_bytes(
+        kind=TRADE_CALENDAR_SOURCE_KIND,
+        logical_path=f"calendar/{identity.source}.json",
+        payload=payload,
+    )
+
+
+def collect_trade_calendar_fingerprint(data_root: object) -> SourceFingerprint:
+    """Load and fingerprint the market clock a fresh provider would select."""
+
+    # Local import avoids making the provider/calendar/cache module graph
+    # depend on this provenance helper at import time.
+    from .data_provider import DataProvider
+
+    provider = DataProvider(
+        data_root=Path(data_root).expanduser().resolve(strict=True),
+        price_mode="hfq",
+        execution_price_mode="raw",
+    )
+    return trade_calendar_fingerprint(provider.trade_calendar_identity)
 
 
 def normalize_price_mode(value: object) -> str:
@@ -132,6 +170,37 @@ def _factor_paths(symbol: str) -> Tuple[str, ...]:
     )
 
 
+def _shared_runtime_paths(_symbols: Iterable[str]) -> Tuple[str, ...]:
+    # These files are shared inputs rather than symbol-specific lanes.  Bind
+    # all of them when present, including for ALL_MARKET (symbols=None), so a
+    # universe can never be selected from one metadata generation and later
+    # attributed to another.
+    return (
+        "parquet/metadata/common/industry/mapping.parquet",
+        "parquet/metadata/stock/basic.parquet",
+        "parquet/metadata/etf/basic.parquet",
+    )
+
+
+def _runtime_support_paths(symbol: str) -> Tuple[str, ...]:
+    candidates = []
+    for directory in (
+        "daily_basic",
+        "moneyflow",
+        "cyq_chips",
+        "margin",
+        "holder_trade",
+        "repurchase",
+    ):
+        candidates.extend(
+            PurePosixPath(
+                "parquet", "timeseries", directory, f"{candidate}.parquet"
+            ).as_posix()
+            for candidate in _symbol_candidates(symbol)
+        )
+    return tuple(candidates)
+
+
 def _minute_directory(symbol: str, mode: str) -> str:
     prefix = "etf_" if is_exchange_fund(symbol) else ""
     suffix = "minute_raw" if mode == "raw" else "minute"
@@ -168,24 +237,16 @@ def _first_existing_plain_directory(
 ) -> Optional[Path]:
     for relative in candidates:
         path = root.joinpath(*PurePosixPath(relative).parts)
-        try:
-            info = path.lstat()
-        except OSError:
-            continue
-        if (
-            stat.S_ISDIR(info.st_mode)
-            and not path.is_symlink()
-            and not (
-                getattr(info, "st_file_attributes", 0)
-                & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
-            )
-        ):
+        if is_supported_direct_parquet_directory(path, root=root):
             return path
     return None
 
 
 def _fingerprint_readable_nonempty_parquet(
-    path: Path, *, root: Path
+    path: Path,
+    *,
+    root: Path,
+    kind: str = MARKET_DATA_SOURCE_KIND,
 ) -> Optional[SourceFingerprint]:
     """Prove that a direct Parquet file prevents reader fallback.
 
@@ -197,14 +258,14 @@ def _fingerprint_readable_nonempty_parquet(
     """
 
     before = SourceFingerprint.from_file(
-        path, root=root, kind=MARKET_DATA_SOURCE_KIND
+        path, root=root, kind=kind
     )
     try:
         frame = pd.read_parquet(path)
     except Exception:
         return None
     after = SourceFingerprint.from_file(
-        path, root=root, kind=MARKET_DATA_SOURCE_KIND
+        path, root=root, kind=kind
     )
     if before != after:
         raise OSError(
@@ -223,6 +284,7 @@ def collect_market_data_fingerprints(
     frequency: str = "daily",
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    _include_shared_runtime_metadata: bool = True,
 ) -> Tuple[SourceFingerprint, ...]:
     """Hash direct sources for one explicit configured/realized universe.
 
@@ -236,8 +298,10 @@ def collect_market_data_fingerprints(
     mode = normalize_price_mode(price_mode)
     if frequency != "daily" and frequency not in MINUTE_FREQUENCIES:
         raise ValueError("frequency must be daily or a supported minute frequency")
-    if data_root is None or symbols is None:
+    if data_root is None:
         return ()
+    if type(_include_shared_runtime_metadata) is not bool:
+        raise TypeError("_include_shared_runtime_metadata must be exactly bool")
     root = Path(data_root).expanduser().resolve()
     if not root.is_dir():
         return ()
@@ -265,11 +329,32 @@ def collect_market_data_fingerprints(
                 int(start_text[:4]), int(end_text[:4]) + 1
             )
         )
+    requested_symbols = () if symbols is None else symbols
+    canonical_symbols = tuple(sorted({
+        str(value).strip() for value in requested_symbols if str(value).strip()
+    }))
     sources = []
     seen = set()
-    for symbol in sorted(set(str(value).strip() for value in symbols)):
-        if not symbol:
+    shared_runtime_paths = (
+        _shared_runtime_paths(canonical_symbols)
+        if _include_shared_runtime_metadata
+        else ()
+    )
+    for relative in shared_runtime_paths:
+        common_metadata = _first_existing(root, (relative,))
+        if common_metadata is None:
             continue
+        source = _fingerprint_readable_nonempty_parquet(
+            common_metadata,
+            root=root,
+            kind=RUNTIME_METADATA_SOURCE_KIND,
+        )
+        if source is not None:
+            key = (source.kind, source.logical_path.casefold())
+            if key not in seen:
+                sources.append(source)
+                seen.add(key)
+    for symbol in canonical_symbols:
         for lane in lanes:
             path = _first_existing(root, expected_daily_paths(symbol, lane))
             if path is not None:
@@ -281,6 +366,20 @@ def collect_market_data_fingerprints(
                     if key not in seen:
                         sources.append(source)
                         seen.add(key)
+        for relative in _runtime_support_paths(symbol):
+            support = _first_existing(root, (relative,))
+            if support is None:
+                continue
+            source = _fingerprint_readable_nonempty_parquet(
+                support,
+                root=root,
+                kind=RUNTIME_METADATA_SOURCE_KIND,
+            )
+            if source is not None:
+                key = (source.kind, source.logical_path.casefold())
+                if key not in seen:
+                    sources.append(source)
+                    seen.add(key)
         if mode == "dual":
             factor = _first_existing(root, _factor_paths(symbol))
             if factor is not None:
@@ -306,7 +405,7 @@ def collect_market_data_fingerprints(
                     ):
                         continue
                     if not is_supported_direct_parquet_file(
-                        path, root=directory
+                        path, root=root
                     ):
                         continue
                     source = _fingerprint_readable_nonempty_parquet(
@@ -319,6 +418,62 @@ def collect_market_data_fingerprints(
                         sources.append(source)
                         seen.add(key)
     return tuple(sorted(sources, key=lambda item: (item.kind, item.logical_path)))
+
+
+def require_complete_direct_sources(
+    symbol: str,
+    price_mode: str,
+    sources: Iterable[SourceFingerprint],
+    *,
+    frequency: str = "daily",
+) -> Tuple[str, ...]:
+    """Reject untracked fallback routes for an explicit, rankable universe."""
+
+    mode = normalize_price_mode(price_mode)
+    if frequency != "daily" and frequency not in MINUTE_FREQUENCIES:
+        raise ValueError("frequency must be daily or a supported minute frequency")
+    frozen = tuple(sources)
+    if any(not isinstance(source, SourceFingerprint) for source in frozen):
+        raise TypeError("sources must contain SourceFingerprint values")
+    allowed_kinds = {MARKET_DATA_SOURCE_KIND, RUNTIME_METADATA_SOURCE_KIND}
+    if any(source.kind not in allowed_kinds for source in frozen):
+        raise ValueError(
+            "sources must contain only market_data_file or "
+            "market_metadata_file provenance evidence"
+        )
+    logical_paths = {
+        source.logical_path
+        for source in frozen
+        if source.kind == MARKET_DATA_SOURCE_KIND
+    }
+    lanes = ("hfq", "raw") if mode == "dual" else (mode,)
+    missing = []
+    for lane in lanes:
+        if not any(
+            candidate in logical_paths for candidate in expected_daily_paths(symbol, lane)
+        ):
+            missing.append(f"daily:{lane}")
+        if frequency in MINUTE_FREQUENCIES:
+            directories = set(expected_minute_directories(symbol, lane))
+            if not any(
+                PurePosixPath(path).parent.as_posix() in directories
+                and PurePosixPath(path).suffix == ".parquet"
+                and len(PurePosixPath(path).stem) == 4
+                and PurePosixPath(path).stem.isdigit()
+                for path in logical_paths
+            ):
+                missing.append(f"minute:{lane}")
+    if mode == "dual" and not any(
+        candidate in logical_paths for candidate in _factor_paths(symbol)
+    ):
+        missing.append("adj_factor")
+    if missing:
+        raise ValueError(
+            "DYNAMIC_MARKET_DATA_SOURCE_UNVERIFIED: observed symbol "
+            f"{symbol} is not backed by complete direct v1 sources "
+            f"({', '.join(missing)}); fallback routes cannot be ranked"
+        )
+    return ()
 
 
 class DynamicMarketDataFingerprintTracker:
@@ -354,10 +509,14 @@ class DynamicMarketDataFingerprintTracker:
         self._start_date = start_date
         self._end_date = end_date
         self._collector = collector or collect_market_data_fingerprints
+        self._uses_builtin_collector = (
+            self._collector is collect_market_data_fingerprints
+        )
         if type(allow_incomplete_sources) is not bool:
             raise TypeError("allow_incomplete_sources must be exactly bool")
         self._allow_incomplete_sources = allow_incomplete_sources
         self._snapshots = {}
+        self._shared_snapshots = {}
         self._incomplete_symbols = set()
         self._lock = RLock()
 
@@ -369,16 +528,75 @@ class DynamicMarketDataFingerprintTracker:
         start_date: Optional[str],
         end_date: Optional[str],
     ) -> Tuple[SourceFingerprint, ...]:
-        return tuple(
-            self._collector(
-                self._data_root,
-                symbols=(symbol,),
-                price_mode=self._price_mode,
-                frequency=frequency,
-                start_date=start_date,
-                end_date=end_date,
-            )
+        kwargs = {
+            "symbols": (symbol,),
+            "price_mode": self._price_mode,
+            "frequency": frequency,
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+        if self._uses_builtin_collector:
+            kwargs["_include_shared_runtime_metadata"] = False
+        return tuple(self._collector(self._data_root, **kwargs))
+
+    def _read_shared_source(
+        self, relative: str
+    ) -> Optional[SourceFingerprint]:
+        if self._data_root is None:
+            return None
+        root = Path(self._data_root).expanduser().resolve()
+        if not root.is_dir():
+            return None
+        path = _first_existing(root, (relative,))
+        if path is None:
+            return None
+        return _fingerprint_readable_nonempty_parquet(
+            path,
+            root=root,
+            kind=RUNTIME_METADATA_SOURCE_KIND,
         )
+
+    def _shared_sources_for(
+        self, symbol: str
+    ) -> Tuple[SourceFingerprint, ...]:
+        if not self._uses_builtin_collector:
+            return ()
+        sources = []
+        for relative in _shared_runtime_paths((symbol,)):
+            if relative not in self._shared_snapshots:
+                self._shared_snapshots[relative] = self._read_shared_source(
+                    relative
+                )
+            source = self._shared_snapshots[relative]
+            if source is not None:
+                sources.append(source)
+        return tuple(sources)
+
+    def _with_shared_sources(
+        self,
+        symbol: str,
+        sources: Iterable[SourceFingerprint],
+        *,
+        shared_snapshots=None,
+    ) -> Tuple[SourceFingerprint, ...]:
+        if not self._uses_builtin_collector:
+            return tuple(sources)
+        frozen_shared = (
+            self._shared_snapshots
+            if shared_snapshots is None
+            else shared_snapshots
+        )
+        combined = list(sources)
+        for relative in _shared_runtime_paths((symbol,)):
+            source = frozen_shared.get(relative)
+            if source is not None:
+                combined.append(source)
+        unique = {
+            (source.kind, source.logical_path): source for source in combined
+        }
+        return tuple(sorted(
+            unique.values(), key=lambda item: (item.kind, item.logical_path)
+        ))
 
     def _require_direct_v1_sources(
         self,
@@ -387,39 +605,12 @@ class DynamicMarketDataFingerprintTracker:
         *,
         frequency: str,
     ) -> Tuple[str, ...]:
-        logical_paths = {source.logical_path for source in sources}
-        lanes = (
-            ("hfq", "raw")
-            if self._price_mode == "dual"
-            else (self._price_mode,)
+        return require_complete_direct_sources(
+            symbol,
+            self._price_mode,
+            sources,
+            frequency=frequency,
         )
-        missing = []
-        for lane in lanes:
-            if not any(
-                candidate in logical_paths
-                for candidate in expected_daily_paths(symbol, lane)
-            ):
-                missing.append(f"daily:{lane}")
-            if frequency in MINUTE_FREQUENCIES:
-                prefixes = tuple(
-                    candidate.rstrip("/") + "/"
-                    for candidate in expected_minute_directories(symbol, lane)
-                )
-                if not any(
-                    path.startswith(prefixes) for path in logical_paths
-                ):
-                    missing.append(f"minute:{lane}")
-        if self._price_mode == "dual" and not any(
-            candidate in logical_paths for candidate in _factor_paths(symbol)
-        ):
-            missing.append("adj_factor")
-        if missing:
-            raise ValueError(
-                "DYNAMIC_MARKET_DATA_SOURCE_UNVERIFIED: observed symbol "
-                f"{symbol} is not backed by complete direct v1 sources "
-                f"({', '.join(missing)}); fallback routes cannot be ranked"
-            )
-        return ()
 
     @staticmethod
     def _years(start_date: Optional[str], end_date: Optional[str]) -> frozenset:
@@ -439,9 +630,12 @@ class DynamicMarketDataFingerprintTracker:
         frequency: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        require_direct_prices: bool = True,
     ) -> Tuple[str, ...]:
         if isinstance(symbols, (str, bytes)):
             raise TypeError("market-data observer requires an iterable of symbols")
+        if type(require_direct_prices) is not bool:
+            raise TypeError("require_direct_prices must be exactly bool")
         canonical = tuple(sorted({
             str(value).strip()
             for value in symbols
@@ -469,6 +663,7 @@ class DynamicMarketDataFingerprintTracker:
                     evidence_frequency,
                     evidence_start,
                     evidence_end,
+                    require_direct_prices,
                 )
                 if key in self._snapshots:
                     continue
@@ -483,8 +678,14 @@ class DynamicMarketDataFingerprintTracker:
                         existing_frequency,
                         existing_start,
                         existing_end,
+                        existing_requires_direct_prices,
                     ) = existing_key
                     if existing_symbol != symbol:
+                        continue
+                    if (
+                        require_direct_prices
+                        and not existing_requires_direct_prices
+                    ):
                         continue
                     if (
                         evidence_frequency == "daily"
@@ -503,20 +704,23 @@ class DynamicMarketDataFingerprintTracker:
                         break
                 if covered:
                     continue
+                self._shared_sources_for(symbol)
                 sources = self._capture(
                     symbol,
                     frequency=evidence_frequency,
                     start_date=evidence_start,
                     end_date=evidence_end,
                 )
-                try:
-                    self._require_direct_v1_sources(
-                        symbol, sources, frequency=evidence_frequency
-                    )
-                except ValueError:
-                    if not self._allow_incomplete_sources:
-                        raise
-                    self._incomplete_symbols.add(symbol)
+                sources = self._with_shared_sources(symbol, sources)
+                if require_direct_prices:
+                    try:
+                        self._require_direct_v1_sources(
+                            symbol, sources, frequency=evidence_frequency
+                        )
+                    except ValueError:
+                        if not self._allow_incomplete_sources:
+                            raise
+                        self._incomplete_symbols.add(symbol)
                 self._snapshots[key] = sources
         return tuple(sorted(self._incomplete_symbols.intersection(canonical)))
 
@@ -546,12 +750,29 @@ class DynamicMarketDataFingerprintTracker:
                     for value in item[0]
                 ),
             ))
-        for (symbol, frequency, start_date, end_date), before in snapshots:
+            shared_snapshots = dict(self._shared_snapshots)
+        for relative, before in sorted(shared_snapshots.items()):
+            after = self._read_shared_source(relative)
+            if after != before:
+                raise OSError(
+                    "MARKET_DATA_CHANGED_DURING_RUN: shared runtime metadata "
+                    f"fingerprint changed for {relative}"
+                )
+        for (
+            symbol,
+            frequency,
+            start_date,
+            end_date,
+            _requires_direct_prices,
+        ), before in snapshots:
             after = self._capture(
                 symbol,
                 frequency=frequency,
                 start_date=start_date,
                 end_date=end_date,
+            )
+            after = self._with_shared_sources(
+                symbol, after, shared_snapshots=shared_snapshots
             )
             if after != before:
                 raise OSError(
@@ -765,14 +986,19 @@ __all__ = [
     "DynamicMarketDataFingerprintTracker",
     "MARKET_DATA_SOURCE_KIND",
     "MINUTE_FREQUENCIES",
+    "RUNTIME_METADATA_SOURCE_KIND",
     "PRICE_MODES",
+    "TRADE_CALENDAR_SOURCE_KIND",
     "artifact_price_mode",
     "artifact_symbols",
+    "collect_trade_calendar_fingerprint",
     "collect_market_data_fingerprints",
     "display_price_mode",
     "expected_daily_paths",
     "expected_minute_directories",
     "load_verified_display_daily_source",
     "normalize_price_mode",
+    "require_complete_direct_sources",
+    "trade_calendar_fingerprint",
     "verify_display_daily_source",
 ]

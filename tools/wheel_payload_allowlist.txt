@@ -4,6 +4,7 @@
 diepi/__init__.py
 diepi/__main__.py
 diepi/cli.py
+diepi/integration.py
 diepi/artifacts/__init__.py
 diepi/artifacts/adapters.py
 diepi/artifacts/models.py
@@ -49,6 +50,7 @@ diepi/backtest/data/dataset_manifest.py
 diepi/backtest/data/exceptions.py
 diepi/backtest/data/extraction_service.py
 diepi/backtest/data/index_provider.py
+diepi/backtest/data/plain_files.py
 diepi/backtest/data/report_generator.py
 diepi/backtest/data/result_storage.py
 diepi/backtest/data/source_evidence.py
