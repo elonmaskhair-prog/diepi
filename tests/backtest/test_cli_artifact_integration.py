@@ -255,6 +255,47 @@ def test_source_snapshot_rejects_a_stale_used_market_manifest_member(tmp_path):
         )
 
 
+def test_source_snapshot_does_not_skip_manifest_members_after_manifest_read(
+    tmp_path, monkeypatch,
+):
+    runner_module = importlib.import_module("diepi.backtest.cli.runner")
+    demo = generate_synthetic_demo(tmp_path / "manifest-path-race")
+    raw = (
+        demo.data_root
+        / "parquet"
+        / "timeseries"
+        / "daily_raw"
+        / f"{demo.manifest.symbols[0]}.parquet"
+    )
+    frame = pd.read_parquet(raw)
+    frame.loc[frame.index[0], "close"] = 999.0
+    frame.to_parquet(raw, index=False)
+
+    manifest = demo.data_root / "diepi_dataset.json"
+    real_lexists = runner_module.os.path.lexists
+    manifest_checks = 0
+
+    def transient_manifest_path(path):
+        nonlocal manifest_checks
+        if Path(path) == manifest:
+            manifest_checks += 1
+            return manifest_checks == 1
+        return real_lexists(path)
+
+    monkeypatch.setattr(
+        runner_module.os.path, "lexists", transient_manifest_path
+    )
+
+    with pytest.raises(OSError, match="DATASET_MANIFEST_MEMBER_CHANGED"):
+        _source_fingerprints(
+            demo.data_root,
+            symbols=demo.manifest.symbols,
+            price_mode="dual",
+        )
+
+    assert manifest_checks == 1
+
+
 def test_raw_minimal_cli_artifact_without_dataset_manifest_is_gui_verifiable(
     tmp_path,
 ):
@@ -295,6 +336,98 @@ def test_raw_minimal_cli_artifact_without_dataset_manifest_is_gui_verifiable(
     assert gui.config['price_mode'] == 'raw'
     assert gui.config['symbols'] == [demo.manifest.symbols[0]]
     assert gui.provenance == loaded.provenance
+
+
+@pytest.mark.parametrize("use_default_data_root", [False, True])
+def test_explicit_etf_pool_rejects_untracked_legacy_section_prices(
+    tmp_path, monkeypatch, use_default_data_root,
+):
+    runner_module = importlib.import_module("diepi.backtest.cli.runner")
+    cache_module = importlib.import_module(
+        "diepi.backtest.data.cache_manager"
+    )
+    demo = generate_synthetic_demo(tmp_path / "legacy-etf-section")
+    etf = "510300.SH"
+    raw_path = (
+        demo.data_root
+        / "parquet"
+        / "timeseries"
+        / "daily_raw"
+        / f"{demo.manifest.symbols[0]}.parquet"
+    )
+    raw = pd.read_parquet(raw_path).copy()
+    raw.loc[:, "ts_code"] = etf
+    raw.loc[:, "change"] = raw["close"] - raw["pre_close"]
+    raw.loc[:, "pct_chg"] = raw["change"] / raw["pre_close"] * 100.0
+
+    section = (
+        demo.data_root / "parquet" / "section" / "etf_daily_raw"
+    )
+    section.mkdir(parents=True)
+    for row in raw.to_dict(orient="records"):
+        pd.DataFrame([row]).to_parquet(
+            section / f"{row['trade_date']}.parquet", index=False
+        )
+
+    demo.manifest_file.unlink()
+    shutil.rmtree(demo.data_root / "parquet" / "timeseries")
+    demo.strategy_file.write_text(
+        demo.strategy_file.read_text(encoding="utf-8").replace(
+            demo.manifest.symbols[0], etf
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    run_data_root = demo.data_root
+    if use_default_data_root:
+        monkeypatch.setattr(
+            runner_module, "DEFAULT_DATA_ROOT", str(demo.data_root)
+        )
+        monkeypatch.setattr(
+            cache_module, "DEFAULT_DATA_ROOT", str(demo.data_root)
+        )
+        monkeypatch.setattr(
+            cache_module,
+            "PARQUET_ROOT",
+            str(demo.data_root / "parquet" / "timeseries"),
+        )
+        monkeypatch.setattr(
+            cache_module,
+            "METADATA_ROOT",
+            str(demo.data_root / "parquet" / "metadata"),
+        )
+        run_data_root = None
+
+    results = tmp_path / "results"
+    run_name = (
+        "legacy-etf-section-default-root-rejected"
+        if use_default_data_root
+        else "legacy-etf-section-rejected"
+    )
+    with pytest.raises(
+        OSError, match="DYNAMIC_MARKET_DATA_SOURCE_UNVERIFIED"
+    ):
+        run_backtest(
+            strategy_file=str(demo.strategy_file),
+            start_date=demo.manifest.start_date,
+            end_date=demo.manifest.end_date,
+            initial_cash=1_000_000.0,
+            data_root=run_data_root,
+            output_dir=results,
+            run_name=run_name,
+            pool_symbols=[etf],
+            price_mode="raw",
+            daily_open_previous_day_ratio=0.1,
+            verbose=False,
+        )
+
+    failed = ArtifactStore.load(results / run_name)
+    assert failed.artifact_verified is True
+    assert failed.is_rankable is False
+    assert failed.outcome.result_contract.status is ResultStatus.FAILED
+    assert failed.outcome.error.category.value == "DATA"
+    assert failed.outcome.error.phase == "source_verification"
 
 
 def test_formal_runner_mixes_stock_and_etf_in_one_cash_portfolio(

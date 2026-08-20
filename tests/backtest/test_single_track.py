@@ -124,16 +124,18 @@ class TestSingleTrackStrictContract:
         r, m = _run(tmp_path, root)
         assert r.returncode == 1
         assert m is None
-        assert 'DataContractError' in r.stderr
-        assert 'MISSING_DATASET' in r.stderr
+        assert 'DYNAMIC_MARKET_DATA_SOURCE_UNVERIFIED' in r.stderr
+        assert 'daily:raw' in r.stderr
+        assert 'adj_factor' in r.stderr
 
     def test_only_raw_fails_strict_pair_contract(self, tmp_path):
         root = _build_root(tmp_path, tracks=('daily_raw',))
         r, m = _run(tmp_path, root)
         assert r.returncode == 1
         assert m is None
-        assert 'DataContractError' in r.stderr
-        assert 'MISSING_DATASET' in r.stderr
+        assert 'DYNAMIC_MARKET_DATA_SOURCE_UNVERIFIED' in r.stderr
+        assert 'daily:hfq' in r.stderr
+        assert 'adj_factor' in r.stderr
 
     def test_raw_plus_adj_cannot_replace_missing_strategy_lane(self, tmp_path):
         """raw+因子不能替代缺失的策略价格腿。"""
@@ -142,8 +144,8 @@ class TestSingleTrackStrictContract:
         r, m = _run(tmp_path, root)
         assert r.returncode == 1
         assert m is None
-        assert 'DataContractError' in r.stderr
-        assert 'MISSING_DATASET' in r.stderr
+        assert 'DYNAMIC_MARKET_DATA_SOURCE_UNVERIFIED' in r.stderr
+        assert 'daily:hfq' in r.stderr
 
     def test_dual_track_split_reference(self, tmp_path):
         """双轨+因子是拆分场景唯一受支持的严格参照路径。"""
@@ -161,8 +163,8 @@ class TestSingleTrackStrictContract:
         r, m = _run(tmp_path, root)
         assert r.returncode == 1
         assert m is None
-        assert 'DataContractError' in r.stderr
-        assert 'MISSING_ADJ_FACTOR' in r.stderr
+        assert 'DYNAMIC_MARKET_DATA_SOURCE_UNVERIFIED' in r.stderr
+        assert 'adj_factor' in r.stderr
 
 
 class TestLazyLoadSingleTrack:
