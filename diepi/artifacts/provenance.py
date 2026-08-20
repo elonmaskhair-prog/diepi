@@ -7,6 +7,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
+import stat
 from typing import Any, Dict, Iterable, Optional, Tuple
 
 from .models import (
@@ -84,6 +85,20 @@ class SourceFingerprint:
 
         requested = Path(path)
         link_before = requested.lstat()
+        reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
+
+        def safe_single_link_regular(value):
+            return (
+                stat.S_ISREG(getattr(value, "st_mode", 0))
+                and not stat.S_ISLNK(getattr(value, "st_mode", 0))
+                and not (
+                    getattr(value, "st_file_attributes", 0) & reparse_flag
+                )
+                and getattr(value, "st_nlink", 1) == 1
+            )
+
+        if not safe_single_link_regular(link_before):
+            raise ValueError("source path must be a single-link regular file")
         source = requested.resolve(strict=True)
         root_path = Path(root).resolve(strict=True)
         try:
@@ -120,7 +135,8 @@ class SourceFingerprint:
         with source.open("rb") as stream:
             handle_before = os.fstat(stream.fileno())
             if (
-                not same_object(path_before, handle_before)
+                not safe_single_link_regular(handle_before)
+                or not same_object(path_before, handle_before)
                 or path_before.st_size != handle_before.st_size
             ):
                 raise OSError(
@@ -136,7 +152,10 @@ class SourceFingerprint:
         path_after = source.stat()
         link_after = requested.lstat()
         if (
-            stable_snapshot(link_before) != stable_snapshot(link_after)
+            not safe_single_link_regular(handle_after)
+            or not safe_single_link_regular(path_after)
+            or not safe_single_link_regular(link_after)
+            or stable_snapshot(link_before) != stable_snapshot(link_after)
             or stable_snapshot(handle_before) != stable_snapshot(handle_after)
             or stable_snapshot(path_before) != stable_snapshot(path_after)
             or not same_object(handle_after, path_after)

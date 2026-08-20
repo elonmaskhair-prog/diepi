@@ -40,8 +40,9 @@ dieΠ 面向普通本地用户开放，但不会替用户取得、下载或授�
 
 ## 文档边界
 
-这组文档描述 dieΠ `0.1.0` Alpha 当前工作树，不把架构设想写成已实现能力。
+这组文档描述 dieΠ `0.1.1` Alpha 当前工作树，不把架构设想写成已实现能力。
 `dieΠ` 是项目品牌，ASCII 发行名和 CLI 命令为 `diepi`；公开 Python API 位于
-`diepi.backtest` / `diepi.futures` / `diepi.artifacts`。GUI 是 Python 包/wheel 的正式可选功能；当前不提供或
+`diepi.backtest` / `diepi.futures` / `diepi.artifacts`，编排 adapter 使用版本化
+`diepi.integration` capability 契约。GUI 是 Python 包/wheel 的正式可选功能；当前不提供或
 承诺 Windows/macOS/Linux 的独立安装器。Roadmap、多策略实验
 编排、通用插件系统、实盘交易和尚未接入的历史数据快照，应放在独立规划文档中。

@@ -19,7 +19,17 @@ parity_runs_v2/
 # 本地环境
 .venv/
 .env
+.env.*
+!.env.example
+api.md
+.pypirc
+.npmrc
+*.key
+*.pem
+*.p12
+*.pfx
 .DS_Store
+Thumbs.db
 
 # 打包产物
 build/

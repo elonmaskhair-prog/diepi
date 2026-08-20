@@ -1,6 +1,6 @@
 # dieΠ 本地行情数据格式 v1
 
-> 适用版本：`diepi 0.1.0` Alpha；格式版本：`diepi-local-market-data-v1`；校对日期：2026-08-16。  
+> 适用版本：`diepi 0.1.1` Alpha；格式版本：`diepi-local-market-data-v1`；校对日期：2026-08-20。
 > 本文是股票与 ETF/LOF 现金引擎的本地行情输入规范。期货、signals CSV、combo
 > bundle 和结果工件各有独立契约，不属于本格式。
 
@@ -79,15 +79,30 @@ ETF 日线还有 `parquet/section/etf_daily/{date}.parquet` 和 `etf_daily_raw` 
 
 ### 2.3 文件系统边界
 
-直接行情、因子和分钟分片必须是普通规则文件：
+直接行情、因子、分钟分片、manifest、元数据和本地交易日历都必须是单链接的普通规则文件：
 
 - 不能用同名 Parquet dataset 目录代替 `.parquet` 文件；
-- 不能是 symlink、junction 或 Windows reparse point；
+- 不能是 hard link（`st_nlink != 1`）、symlink、junction 或 Windows reparse point；
 - 分钟 symbol 目录本身也不能是链接/重解析点；
 - Parquet 压缩算法、row group 大小和 writer 不限定，但必须能被当前
   pandas/PyArrow 正常读取。
 
-实现位置：[`CacheConfig` 与 `ParquetReader`](../../diepi/backtest/data/cache_manager.py)。
+`0.1.1` 的读取上限是公开输入契约的一部分：
+
+- `diepi_dataset.json` 最多 4 MiB，最多声明 16,384 个成员；
+- manifest 成员路径最多 1,024 个 UTF-8 字节，每个路径段最多 255 个 UTF-8 字节；
+- manifest 路径必须跨平台唯一：忽略大小写后不得冲突，并拒绝 Windows 盘符/ADS 冒号、
+  保留设备名以及以空格或句点结尾的路径段；
+- manifest 声明的每个 Parquet 成员最多 512 MiB；
+- metadata Parquet 最多 256 MiB；本地 `trade_cal.parquet` 最多 16 MiB。
+
+这些上限在打开文件和解析内容前 fail closed；超过上限时应拆分输入或缩小数据范围，不能
+通过链接、目录替代或修改 manifest 绕过。没有 manifest 时，直接行情的布局和必需来源仍按
+本文其他章节校验，但“每个 manifest 成员 512 MiB”不应被误读成所有未声明文件的通用承诺。
+
+实现位置：[`plain_files.py`](../../diepi/backtest/data/plain_files.py)、
+[`dataset_manifest.py`](../../diepi/backtest/data/dataset_manifest.py) 以及
+[`CacheConfig` 与 `ParquetReader`](../../diepi/backtest/data/cache_manager.py)。
 
 ### 2.4 可选 dataset manifest
 
@@ -97,7 +112,11 @@ row group 的字节差异不会改变逻辑数据身份。
 
 有 manifest 时，`data validate` 会先验证其成员；没有时仍可校验用户自备数据，但报告会
 记录 unmanifested 身份。manifest 只证明它声明的逻辑内容没有变，不证明数据真实、
-可再分发或经济语义正确。实现见
+可再分发或经济语义正确。正式 CLI 会在执行前核对 manifest 中每个成员的逻辑身份；运行
+前后还会对实际价格轨、复权因子、证券 basic/行业 metadata 和本标的已知辅助时序做稳定
+字节指纹。任一运行可达输入变化都会使本次运行 fail closed。大而宽的共享 manifest 会增加
+执行前校验成本，生产者应为一次研究范围发布 scope-specific manifest，而不要在其中混入
+大量无关证券或年份分区。实现见
 [`dataset_manifest.py`](../../diepi/backtest/data/dataset_manifest.py)。
 
 ## 3. `raw` / `hfq` / `dual`
@@ -407,10 +426,11 @@ manifest/请求范围为 `20260101..20260630`；行情 bar 仅有内置日历中
 | `510300.SH` | 华泰柏瑞沪深 300 ETF | `20120528` | `etf_daily* / etf_minute* / etf_adj_factor` |
 | `159915.SZ` | 易方达创业板 ETF | `20111209` | `etf_daily* / etf_minute* / etf_adj_factor` |
 
-**重要：这里提交的是上述证券的真实历史行情小切片，不是 synthetic 数据。它由项目
-所有者从其有权使用并确认可公开这一切片的本地多源行情库中，通过只读规范化切片器
-生成。样例用于说明格式、加载和回测流程，不构成完整行情服务、官方行情基准、投资
-建议或策略业绩证明。**
+**重要：这里提交的是上述证券的真实历史行情小切片，不是 synthetic 数据。维护者自述
+其来源为公开渠道，并决定继续通过只读规范化切片器生成和分发。公开可取得、个人使用或
+非盈利用途不等于第三方已授予再分发许可；相应来源条款和证据由维护者负责核对。样例只
+用于说明格式、加载和回测流程，不构成完整行情服务、官方行情基准、投资建议或策略业绩
+证明。**
 
 每标的有两份 116 行日线（raw/HFQ）、两份 27,956 行分钟线（raw/HFQ）和一份
 117 行因子（锚点 + 116 个 bar 日）；`stock/basic.parquet` 和 `etf/basic.parquet`
@@ -479,17 +499,18 @@ v1 分钟回测的正式必需输入：引擎用它约束已完成数据窗口�
 项目的 Apache-2.0 代码许可不会自动覆盖用户行情、数据商数据或由它们产生的切片。
 “只有四只证券”、“只有半年”、去掉名称或改成 Parquet，都不会自动创造再分发权。
 
-公开发布前必须分开审核：
+发布和下游再分发时应分开审核：
 
 - 代码和文档按项目许可发布；
-- 真实数据只有在来源条款明确允许再分发时才可进入公开仓库；
+- 真实数据的来源条款、证据充分性和再分发风险由维护者/再分发者分别负责确认；
 - 用户本地 `data extract` 输出默认是私有、不可再分发；
 - 每个可公开数据目录都应单独声明生成方式、是否真实行情、许可和研究用途。
 
-本仓库 `examples/market_data_v1` 是项目所有者明确批准公开的真实行情规范化切片。
+本仓库 `examples/market_data_v1` 是项目所有者决定继续公开的真实行情规范化切片；该决定
+不是上游书面授权已经存在的证明。
 同目录 `generate.py` 必须显式接收 `--source-data-root`，只读取约定的四个证券和固定
 日期范围，投影 v1 列、补充同价格轨的分钟 `pre_close`、规范化时间类型，并拒绝覆盖
-目标目录；它不会记录源数据根的绝对路径。该公开确认只适用于仓库精确列出的样例文件，
+目标目录；它不会记录源数据根的绝对路径。维护者的发布决定只适用于仓库精确列出的样例文件，
 不表示完整本地行情库、任意上游数据或用户自行抽取的数据自动获得 Apache-2.0 许可或
 再分发权。
 

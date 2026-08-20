@@ -1,15 +1,18 @@
 """CLI publication tests for the verified RunArtifact boundary."""
 
+from dataclasses import replace
 from pathlib import Path
 import importlib
+import json
 import shutil
 
 import pandas as pd
 import pytest
 
-from diepi.artifacts import ArtifactStore
+from diepi.artifacts import ArtifactStore, SourceFingerprint
 from diepi.backtest.broker.order import OrderStatus
-from diepi.backtest.cli.runner import run_backtest
+from diepi.backtest.cli.runner import _source_fingerprints, run_backtest
+from diepi.backtest.data.stock_pool import StockPool
 from diepi.backtest.engine.portfolio_engine import PortfolioEngine
 from diepi.backtest.result_contract import ResultStatus
 from diepi.backtest.ui.worker import load_gui_run
@@ -119,6 +122,9 @@ def test_cli_publishes_one_verified_atomic_artifact(tmp_path):
     assert loaded.result.cash_audit is not None
     assert loaded.provenance.data_identity_level == "content_sha256"
     assert loaded.provenance.sources[0].logical_path == "diepi_dataset.json"
+    assert len(
+        [source for source in loaded.provenance.sources if source.kind == "trade_calendar"]
+    ) == 1
     assert {
         source.logical_path for source in loaded.provenance.sources
         if source.kind == 'market_data_file'
@@ -127,10 +133,126 @@ def test_cli_publishes_one_verified_atomic_artifact(tmp_path):
         'parquet/timeseries/daily/000001.SZ.parquet',
         'parquet/timeseries/daily_raw/000001.SZ.parquet',
     }
+    assert {
+        source.logical_path for source in loaded.provenance.sources
+        if source.kind == "market_metadata_file"
+    } == {"parquet/metadata/stock/basic.parquet"}
     assert dict(loaded.config)["strategy_file"] == "inputs/strategy.py"
     assert (artifact / "inputs" / "strategy.py").is_file()
     assert (artifact / "summary.json").is_file()
     assert (artifact / "equity_curve.csv").is_file()
+
+
+def test_source_snapshot_revalidates_non_market_manifest_members(tmp_path):
+    demo = generate_synthetic_demo(tmp_path / "manifest-stability")
+    symbol = demo.manifest.symbols[0]
+    _source_fingerprints(
+        demo.data_root,
+        symbols=(symbol,),
+        price_mode="dual",
+    )
+
+    metadata = demo.data_root / "parquet" / "metadata" / "stock" / "basic.parquet"
+    frame = pd.read_parquet(metadata)
+    frame.loc[:, "list_date"] = "20240102"
+    frame.to_parquet(metadata, index=False)
+
+    with pytest.raises(OSError, match="DATASET_MANIFEST_MEMBER_CHANGED"):
+        _source_fingerprints(
+            demo.data_root,
+            symbols=(symbol,),
+            price_mode="dual",
+        )
+
+
+def test_source_snapshot_preserves_the_manifest_file_byte_identity(tmp_path):
+    demo = generate_synthetic_demo(tmp_path / "manifest-bytes")
+    manifest_path = demo.data_root / "diepi_dataset.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_path.write_text(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=False,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+    expected = SourceFingerprint.from_file(
+        manifest_path,
+        root=demo.data_root,
+        kind="dataset_manifest",
+    )
+
+    sources = _source_fingerprints(
+        demo.data_root,
+        symbols=demo.manifest.symbols,
+        price_mode="dual",
+    )
+
+    assert (
+        next(source for source in sources if source.kind == "dataset_manifest")
+        == expected
+    )
+
+
+def test_source_snapshot_binds_an_undeclared_runtime_metadata_file(tmp_path):
+    demo = generate_synthetic_demo(tmp_path / "unmanifested-basic")
+    manifest = replace(
+        demo.manifest,
+        files=tuple(
+            identity
+            for identity in demo.manifest.files
+            if identity.path != "parquet/metadata/stock/basic.parquet"
+        ),
+    )
+    (demo.data_root / "diepi_dataset.json").write_text(
+        manifest.to_json(), encoding="utf-8", newline="\n"
+    )
+    before = _source_fingerprints(
+        demo.data_root,
+        symbols=demo.manifest.symbols,
+        price_mode="dual",
+    )
+
+    basic = demo.data_root / "parquet" / "metadata" / "stock" / "basic.parquet"
+    frame = pd.read_parquet(basic)
+    frame.loc[:, "list_date"] = "20240102"
+    frame.to_parquet(basic, index=False)
+    after = _source_fingerprints(
+        demo.data_root,
+        symbols=demo.manifest.symbols,
+        price_mode="dual",
+    )
+
+    assert before != after
+    assert any(
+        source.kind == "market_metadata_file"
+        and source.logical_path == "parquet/metadata/stock/basic.parquet"
+        for source in before
+    )
+
+
+def test_source_snapshot_rejects_a_stale_used_market_manifest_member(tmp_path):
+    demo = generate_synthetic_demo(tmp_path / "stale-market")
+    raw = (
+        demo.data_root
+        / "parquet"
+        / "timeseries"
+        / "daily_raw"
+        / f"{demo.manifest.symbols[0]}.parquet"
+    )
+    frame = pd.read_parquet(raw)
+    frame.loc[frame.index[0], "close"] = 999.0
+    frame.to_parquet(raw, index=False)
+
+    with pytest.raises(OSError, match="DATASET_MANIFEST_MEMBER_CHANGED"):
+        _source_fingerprints(
+            demo.data_root,
+            symbols=demo.manifest.symbols,
+            price_mode="dual",
+        )
 
 
 def test_raw_minimal_cli_artifact_without_dataset_manifest_is_gui_verifiable(
@@ -322,6 +444,117 @@ def test_cli_fails_closed_when_market_files_change_during_run(
         source.kind != 'market_data_file'
         for source in failed.provenance.sources
     )
+
+
+def test_all_market_pool_metadata_is_frozen_before_universe_selection(
+    tmp_path, monkeypatch,
+):
+    demo = generate_synthetic_demo(tmp_path / "all-market-generation")
+    basic_path = (
+        demo.data_root / "parquet" / "metadata" / "stock" / "basic.parquet"
+    )
+    real_get_all_stocks = StockPool._get_all_stocks
+    mutated = False
+
+    def mutate_after_pool_read(self, *args, **kwargs):
+        nonlocal mutated
+        pool = real_get_all_stocks(self, *args, **kwargs)
+        if not mutated:
+            basic = pd.read_parquet(basic_path)
+            basic.loc[:, "name"] = "MUTATED_AFTER_POOL_READ"
+            basic.to_parquet(basic_path, index=False)
+            mutated = True
+        return pool
+
+    monkeypatch.setattr(
+        StockPool, "_get_all_stocks", mutate_after_pool_read
+    )
+
+    with pytest.raises(OSError, match="MARKET_DATA_CHANGED_DURING_RUN"):
+        run_backtest(
+            strategy_file=str(demo.strategy_file),
+            start_date=demo.manifest.start_date,
+            end_date=demo.manifest.end_date,
+            initial_cash=1_000_000.0,
+            data_root=demo.data_root,
+            output_dir=tmp_path / "results",
+            run_name="all-market-generation-changed",
+            pool_symbols=None,
+            daily_open_previous_day_ratio=0.1,
+            verbose=False,
+        )
+
+    assert mutated is True
+    failed = ArtifactStore.load(
+        tmp_path / "results" / "all-market-generation-changed"
+    )
+    assert failed.artifact_verified is True
+    assert failed.is_rankable is False
+    assert failed.outcome.error.phase == "data_stability_check"
+
+
+def test_outsider_auxiliary_read_is_bound_without_requiring_price_lanes(
+    tmp_path,
+):
+    demo = generate_synthetic_demo(tmp_path / "auxiliary-provenance")
+    outsider = "600000.SH"
+    auxiliary = (
+        demo.data_root
+        / "parquet"
+        / "timeseries"
+        / "daily_basic"
+        / f"{outsider}.parquet"
+    )
+    auxiliary.parent.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "ts_code": [outsider],
+            "trade_date": ["20240102"],
+            "turnover_rate": [1.0],
+        }
+    ).to_parquet(auxiliary, index=False)
+    demo.strategy_file.write_text(
+        '''OUTSIDER = "600000.SH"
+SYMBOL = "000001.SZ"
+
+
+def on_before_market_open(ctx):
+    if ctx.current_date == "20240103":
+        ctx.get_basic(
+            OUTSIDER, start_date="20240102", end_date="20240102"
+        )
+    return [SYMBOL]
+''',
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    output = run_backtest(
+        strategy_file=str(demo.strategy_file),
+        start_date=demo.manifest.start_date,
+        end_date=demo.manifest.end_date,
+        initial_cash=1_000_000.0,
+        data_root=demo.data_root,
+        output_dir=tmp_path / "results",
+        run_name="auxiliary-provenance",
+        pool_symbols=[demo.manifest.symbols[0]],
+        daily_open_previous_day_ratio=0.1,
+        verbose=False,
+    )
+
+    loaded = ArtifactStore.load(output["artifact_dir"])
+    assert loaded.artifact_verified is True
+    assert loaded.is_rankable is True
+    assert any(
+        source.kind == "market_metadata_file"
+        and source.logical_path
+        == f"parquet/timeseries/daily_basic/{outsider}.parquet"
+        for source in loaded.provenance.sources
+    )
+    assert set(loaded.config["realized_symbols"]) == {
+        demo.manifest.symbols[0],
+        outsider,
+    }
 
 
 def test_cli_exception_publishes_structured_failed_artifact(tmp_path):

@@ -18,6 +18,7 @@ diepi/artifacts/provenance.py
 diepi/artifacts/storage.py
 diepi/__init__.py
 diepi/__main__.py
+diepi/integration.py
 diepi/backtest/__init__.py
 diepi/backtest/broker/__init__.py
 diepi/backtest/broker/account.py
@@ -51,6 +52,7 @@ diepi/backtest/data/dataset_manifest.py
 diepi/backtest/data/exceptions.py
 diepi/backtest/data/extraction_service.py
 diepi/backtest/data/index_provider.py
+diepi/backtest/data/plain_files.py
 diepi/backtest/data/report_generator.py
 diepi/backtest/data/result_storage.py
 diepi/backtest/data/source_evidence.py
@@ -197,6 +199,7 @@ tests/backtest/test_fee_engine_unit.py
 tests/backtest/test_frequency_contract.py
 tests/backtest/test_index_provider.py
 tests/backtest/test_integration.py
+tests/backtest/test_integration_contract.py
 tests/backtest/test_limit_rules.py
 tests/backtest/test_liquidity_amount.py
 tests/backtest/test_listing_rules_unit.py
@@ -215,6 +218,7 @@ tests/backtest/test_parallel_runner_result_gate.py
 tests/backtest/test_portfolio_window_boundaries.py
 tests/backtest/test_position.py
 tests/backtest/test_price_mode_adjustment_gate.py
+tests/backtest/test_plain_file_security.py
 tests/backtest/test_public_examples.py
 tests/backtest/test_rebalance_semantics.py
 tests/backtest/test_reference_index_comparison.py
@@ -231,6 +235,7 @@ tests/backtest/test_settlement_atomicity.py
 tests/backtest/test_single_engine_lifecycle_c0.py
 tests/backtest/test_single_track.py
 tests/backtest/test_single_window_boundaries.py
+tests/backtest/test_source_evidence_contract.py
 tests/backtest/test_signal_input.py
 tests/backtest/test_stock_pool.py
 tests/backtest/test_stock_pool_point_in_time.py
@@ -238,6 +243,7 @@ tests/backtest/test_strategy.py
 tests/backtest/test_target_execution_bundle.py
 tests/backtest/test_target_intent_contract.py
 tests/backtest/test_target_intent_integration.py
+tests/backtest/test_cli_stop_check.py
 tests/backtest/test_target_rebalance.py
 tests/backtest/test_combo_bundle.py
 tests/backtest/test_ui_regressions.py

@@ -16,7 +16,7 @@ import contextlib
 import traceback
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
 
 import pandas as pd
 from diepi.artifacts import (
@@ -37,7 +37,10 @@ from ..data.stock_pool import PoolSource
 from ..data.source_evidence import (
     DynamicMarketDataFingerprintTracker,
     collect_market_data_fingerprints,
+    collect_trade_calendar_fingerprint,
 )
+from ..data.dataset_manifest import DatasetManifest, identify_parquet_file
+from ..data.plain_files import DATASET_MANIFEST_MAX_BYTES, read_plain_bytes
 from ..liquidity import build_daily_auction_liquidity_policy
 from ..result_contract import ResultContract, ResultReason, ResultStatus
 from .signal_input import SignalReplayInput
@@ -264,6 +267,7 @@ def _source_fingerprints(
     frequency: str = 'daily',
     start_date: str = None,
     end_date: str = None,
+    verify_manifest_members: bool = True,
 ) -> tuple:
     """Record dataset and direct market-file identities without leaking paths."""
     if data_root is None:
@@ -271,20 +275,54 @@ def _source_fingerprints(
     root = Path(data_root).resolve()
     manifest = root / 'diepi_dataset.json'
     sources = []
-    if manifest.is_file():
-        sources.append(SourceFingerprint.from_file(
-            manifest,
-            root=root,
+    if os.path.lexists(manifest):
+        try:
+            manifest_bytes = read_plain_bytes(
+                manifest,
+                root=root,
+                max_bytes=DATASET_MANIFEST_MAX_BYTES,
+                label="dataset manifest",
+            )
+            contract = DatasetManifest.from_dict(
+                json.loads(manifest_bytes.decode('utf-8'))
+            )
+        except Exception as exc:
+            raise OSError(
+                "DATASET_MANIFEST_VERIFICATION_FAILED: the dataset manifest "
+                "could not be verified"
+            ) from exc
+        sources.append(SourceFingerprint.from_bytes(
             kind='dataset_manifest',
+            logical_path='diepi_dataset.json',
+            payload=manifest_bytes,
         ))
-    sources.extend(collect_market_data_fingerprints(
+    sources.append(collect_trade_calendar_fingerprint(root))
+    market_sources = collect_market_data_fingerprints(
         root,
         symbols=symbols,
         price_mode=price_mode,
         frequency=frequency,
         start_date=start_date,
         end_date=end_date,
-    ))
+    )
+    sources.extend(market_sources)
+    if os.path.lexists(manifest) and verify_manifest_members:
+        for expected in contract.files:
+            # Validate every logical identity once before execution.  The
+            # post-run snapshot skips this full-table decode and relies on the
+            # exact byte fingerprints above for runtime-reachable inputs.
+            try:
+                actual = identify_parquet_file(root, expected.path)
+            except Exception as exc:
+                raise OSError(
+                    "DATASET_MANIFEST_VERIFICATION_FAILED: a declared dataset "
+                    "member could not be verified"
+                ) from exc
+            if actual != expected:
+                raise OSError(
+                    "DATASET_MANIFEST_MEMBER_CHANGED: a declared dataset "
+                    "member no longer matches its logical identity"
+                )
     return tuple(sorted(
         sources, key=lambda source: (source.kind, source.logical_path)
     ))
@@ -535,6 +573,7 @@ def run_backtest(
     verbose: bool = True,
     transfer_fee_rate: float = 0.0,
     data_root=None,
+    stop_check: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, Any]:
     """
     运行回测
@@ -557,6 +596,7 @@ def run_backtest(
         limit_pct_overrides: 涨跌停幅度覆盖表 {代码: 幅度}
         strategy_params: 策略模块级参数覆盖 {变量名: 值}
         verbose: 是否输出详细信息
+        stop_check: 可选协作取消回调；返回 True 时引擎发布规范 CANCELED 工件
 
     Returns:
         回测结果字典
@@ -882,6 +922,7 @@ def run_backtest(
             trading_days_per_year=trading_days_per_year,
             risk_free_rate=risk_free_rate,
             progress_callback=progress_callback,
+            stop_check=stop_check,
             data_root=data_root,
             market_data_observer=(
                 dynamic_fingerprint_tracker.observe
@@ -920,6 +961,7 @@ def run_backtest(
             frequency=freq,
             start_date=start_date,
             end_date=end_date,
+            verify_manifest_members=False,
         )
         if post_run_source_fingerprints != pre_run_source_fingerprints:
             raise OSError(

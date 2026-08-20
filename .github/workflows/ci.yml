@@ -26,6 +26,10 @@ jobs:
             tests: >-
               tests/backtest/test_onboarding_services.py
               tests/backtest/test_onboarding_commands.py
+              tests/backtest/test_integration_contract.py
+              tests/backtest/test_plain_file_security.py
+              tests/backtest/test_source_evidence_contract.py
+              tests/backtest/test_cli_stop_check.py
               tests/backtest/test_run_artifacts.py
               tests/futures/test_engine_synthetic.py
           - profile: gui

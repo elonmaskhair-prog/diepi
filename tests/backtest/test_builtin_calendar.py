@@ -139,7 +139,9 @@ def test_invalid_local_override_fails_closed_instead_of_using_bundled(tmp_path):
         end_date="20240103",
         price_mode="raw",
     )
-    report, _open_days, issues = _validate_calendar(path, scope)
+    report, _open_days, issues = _validate_calendar(
+        path, scope, data_root=tmp_path
+    )
     assert report["source"] == "local_override"
     assert report["status"] == "fail"
     assert "TRADE_CALENDAR_SCOPE_UNPROVEN" in {
@@ -155,7 +157,9 @@ def test_validation_reports_calendar_source_identity_and_scope_failure(tmp_path)
         price_mode="raw",
     )
     result, open_days, issues = _validate_calendar(
-        tmp_path / "parquet/metadata/common/trade_cal.parquet", scope
+        tmp_path / "parquet/metadata/common/trade_cal.parquet",
+        scope,
+        data_root=tmp_path,
     )
 
     assert issues == []
@@ -180,7 +184,9 @@ def test_validation_reports_calendar_source_identity_and_scope_failure(tmp_path)
         price_mode="raw",
     )
     failed, _open_days, outside_issues = _validate_calendar(
-        tmp_path / "parquet/metadata/common/trade_cal.parquet", outside
+        tmp_path / "parquet/metadata/common/trade_cal.parquet",
+        outside,
+        data_root=tmp_path,
     )
     assert failed["status"] == "fail"
     assert failed["source"] == "bundled"

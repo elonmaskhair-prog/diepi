@@ -100,8 +100,9 @@
 
 ## 使用前先确认范围
 
-当前版本是 `0.1.0` Alpha。项目品牌写作 dieΠ；Python 发行名和命令行入口写作 `diepi`。
-公开 API 位于 `diepi.backtest`、`diepi.futures` 和 `diepi.artifacts`。
+当前源码版本是 `0.1.1` Alpha。项目品牌写作 dieΠ；Python 发行名和命令行入口写作
+`diepi`。公开 API 位于 `diepi.backtest`、`diepi.futures`、`diepi.artifacts`；Agent/MCP 等
+编排 adapter 使用版本化 `diepi.integration` capability 契约。
 
 当前正式主路径是沪深北 A 股与 ETF/LOF 的日线现金研究，以及自备本地数据的诊断、严格
 校验、CLI/Python 回测和 GUI 结果检查。分钟现金回测、独立并行和底层 Python 编排属于高级
@@ -196,10 +197,16 @@ GUI 历史中会同时出现代码策略 `public-ma-mixed` 和信号回放 `publ
 
 ## 使用自己的本地数据
 
-dieΠ 不下载、不上传，也不附带完整行情库。每个 Parquet 的字段名、dtype、单位、日线/分钟
-分片、复权因子锚点和完整示例见 `docs/product/05-local-market-data-format-v1.md`。最少的 raw
-日线工作区只需所选标的一个文件：股票放在 `daily_raw/`，ETF/LOF 放在
-`etf_daily_raw/`，字段为 `trade_date,open,high,low,close,pre_close,amount`。
+dieΠ 不下载、不上传，也不附带完整行情库。公开源码和 sdist 包含一份由维护者从公开
+渠道整理并决定继续分发的四证券、半年真实行情格式切片；运行时 wheel 不包含该切片。
+公开可访问、个人使用或非商业使用本身不等于第三方已授予再分发权，代码的 Apache-2.0
+许可也不自动覆盖行情数据。上游条款和证据链由维护者负责持续复核；下游再分发者仍应
+独立确认适用权利。
+
+每个 Parquet 的字段名、dtype、单位、日线/分钟分片、复权因子锚点和完整示例见
+`docs/product/05-local-market-data-format-v1.md`。最少的 raw 日线工作区只需所选标的一个
+文件：股票放在 `daily_raw/`，ETF/LOF 放在 `etf_daily_raw/`，字段为
+`trade_date,open,high,low,close,pre_close,amount`。
 
 默认 `dual` 模式要求研究用 HFQ 轨、原始撮合轨和复权因子严格对齐。
 如果研究只需要单一价格空间，应显式选择 `--price-mode hfq` 或 `--price-mode raw`；缺少
@@ -303,6 +310,9 @@ PyPI 会直接渲染本 README，因此这里使用可复制路径而不是无�
 - `SECURITY.md`：安全报告方式；
 - `THIRD_PARTY_NOTICES.md`：依赖许可证披露；
 - `CHANGELOG.md`：用户可见变更。
+
+安全问题不要公开披露，使用 `SECURITY.md` 中的 GitHub 私密报告入口。
+本文不虚构尚不存在的邮箱或下载地址；外部渠道只写入已经建立的实际 URL。
 
 ## 免责声明
 

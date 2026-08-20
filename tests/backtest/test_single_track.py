@@ -9,16 +9,18 @@ fail-fast，不能通过隐式镜像伪造另一价格空间。
 DATA_ROOT 在 import 时冻结，故经子进程 + 环境变量注入合成数据根。
 """
 
+from dataclasses import replace
 import json
 import os
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
 
 import pandas as pd
 
 from diepi.artifacts import ArtifactStore
 from diepi.backtest.cli.runner import run_backtest
+from diepi.backtest.data.dataset_manifest import identify_parquet_file
 from diepi.backtest.ui.worker import load_gui_run
 from diepi.demo.generator import (
     DEMO_END_DATE,
@@ -297,6 +299,19 @@ def test_cli_all_market_missing_member_is_verified_partial_artifact(tmp_path):
     missing['ts_code'] = '000002.SZ'
     pd.concat([basic, missing], ignore_index=True).to_parquet(
         basic_path, index=False
+    )
+    basic_identity = identify_parquet_file(
+        demo.data_root, 'parquet/metadata/stock/basic.parquet'
+    )
+    manifest = replace(
+        demo.manifest,
+        files=tuple(
+            basic_identity if item.path == basic_identity.path else item
+            for item in demo.manifest.files
+        ),
+    )
+    demo.manifest_file.write_text(
+        manifest.to_json(), encoding='utf-8', newline='\n'
     )
 
     output = run_backtest(

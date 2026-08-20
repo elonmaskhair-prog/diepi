@@ -12,6 +12,7 @@ permissions:
 env:
   PIP_CONSTRAINT: ${{ github.workspace }}/tools/release_tool_constraints.txt
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  DATA_ROOT: ${{ github.workspace }}/.release-gate/release-empty-data
   QT_QPA_PLATFORM: offscreen
   PYQTGRAPH_QT_LIB: PySide6
 
@@ -36,6 +37,21 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+      - name: Validate release tag matches project version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import tomllib
+
+          metadata = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          expected = "v" + metadata["project"]["version"]
+          actual = os.environ["GITHUB_REF_NAME"]
+          if actual != expected:
+              raise SystemExit(f"release tag mismatch: expected {expected!r}, got {actual!r}")
+          PY
       - name: Install Linux GUI runtime libraries
         run: |
           sudo apt-get update
@@ -50,6 +66,11 @@ jobs:
         run: |
           python tools/check_public_tree.py --mode git --revision HEAD
           python tools/check_markdown_links.py
+      - name: Run the complete data-free release test and lint gates
+        run: |
+          python -c "from pathlib import Path; Path(r'${{ github.workspace }}/.release-gate/release-empty-data').mkdir(parents=True, exist_ok=True)"
+          python tools/run_test_gate.py --junitxml .release-gate/publish-tests.xml --min-passed 2000 -- -m "not integration" tests/backtest tests/futures
+          python -m ruff check diepi tests tools examples
       - name: Audit the resolved release environment
         run: |
           python -m pip freeze --all --exclude-editable > "${RUNNER_TEMP}/diepi-resolved-release.txt"

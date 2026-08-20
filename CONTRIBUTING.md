@@ -1,12 +1,13 @@
 # 参与 dieΠ
 
-感谢你考虑参与 dieΠ。项目仍处于 Alpha 阶段，正在本地完成首次公开前审阅。与扩展功能
-数量相比，正确性、可复现性和明确披露研究假设更重要。
+感谢你考虑参与 dieΠ。项目仍处于 `0.1.x` Alpha 阶段；准确的已发布版本和候选状态以
+`CHANGELOG.md` 与 GitHub Releases 为准。与扩展功能数量相比，正确性、可复现性和明确披露
+研究假设更重要。
 
 ## 开始之前
 
-- 公共仓库建立后，请通过仓库届时公布的贡献渠道讨论改动；首次公开前，只通过当前本地
-  审阅已经建立的私密渠道与维护者协调。
+- 普通缺陷和功能讨论使用现有 GitHub 仓库的 issue/pull request；疑似漏洞必须按
+  `SECURITY.md` 使用私密渠道，不要公开披露。
 - 保持改动聚焦。除非无法独立审阅，不要把行为变更、打包变更和大规模重构混在一起。
 - 不要提交行情数据、私有策略、凭据、本机绝对路径或生成的回测结果。
 - 需要数据夹具时，优先使用确定性 synthetic 数据，并在名称、manifest 和文档中明确标记
@@ -39,7 +40,7 @@ python tools/run_test_gate.py --junitxml .release-gate/local/unit.xml --min-pass
 python tools/build_release.py --output-root .release-gate/local-build
 ```
 
-首次公开候选还应运行静态、覆盖率和依赖漏洞检查：
+每个发布候选还应运行静态、覆盖率和依赖漏洞检查：
 
 ```bash
 python -m ruff check diepi tests tools examples
@@ -59,11 +60,11 @@ python -m pytest tests/backtest/test_onboarding_services.py tests/backtest/test_
 ```
 
 onboarding 测试必须使用临时目录和 generated synthetic 数据，不应依赖贡献者的真实
-`DATA_ROOT`。公开 README 会作为包索引长描述渲染；在真实公共仓库 URL 尚未建立时，使用
-纯文字仓库路径，不要虚构链接、邮箱或下载地址。
+`DATA_ROOT`。公开 README 会作为包索引长描述渲染；仓库、问题跟踪和安全入口必须使用
+已经建立的实际 URL，不要虚构链接、邮箱或下载地址。
 
 发布门禁会从显式白名单生成源码快照，检查 sdist 和 wheel，从解包后的 sdist 收集测试，
-并隔离安装 wheel 做冒烟验证。通过门禁不能替代首次公开前的干净历史和隐私审阅。
+并隔离安装 wheel 做冒烟验证。通过门禁不能替代 clean diff、来源身份和隐私审阅。
 Python 3.10 的最低直接依赖组合记录在 `tools/minimum_core_requirements.txt` 和
 `tools/minimum_gui_requirements.txt`；修改依赖下界时必须同步更新并验证这两份文件。
 
