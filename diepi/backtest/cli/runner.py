@@ -30,7 +30,7 @@ from diepi.artifacts import (
     SourceFingerprint,
 )
 from .. import __version__
-from ..config import RESULTS_DIR
+from ..config import DATA_ROOT as DEFAULT_DATA_ROOT, RESULTS_DIR
 from ..engine import PortfolioEngine
 from ..strategy import BarData, PortfolioBarData, PortfolioStrategy, Strategy
 from ..data.stock_pool import PoolSource
@@ -38,6 +38,7 @@ from ..data.source_evidence import (
     DynamicMarketDataFingerprintTracker,
     collect_market_data_fingerprints,
     collect_trade_calendar_fingerprint,
+    require_complete_direct_sources,
 )
 from ..data.dataset_manifest import DatasetManifest, identify_parquet_file
 from ..data.plain_files import DATASET_MANIFEST_MAX_BYTES, read_plain_bytes
@@ -275,6 +276,7 @@ def _source_fingerprints(
     root = Path(data_root).resolve()
     manifest = root / 'diepi_dataset.json'
     sources = []
+    contract = None
     if os.path.lexists(manifest):
         try:
             manifest_bytes = read_plain_bytes(
@@ -297,16 +299,28 @@ def _source_fingerprints(
             payload=manifest_bytes,
         ))
     sources.append(collect_trade_calendar_fingerprint(root))
+    scope_symbols = None if symbols is None else tuple(symbols)
     market_sources = collect_market_data_fingerprints(
         root,
-        symbols=symbols,
+        symbols=scope_symbols,
         price_mode=price_mode,
         frequency=frequency,
         start_date=start_date,
         end_date=end_date,
     )
+    if scope_symbols is not None:
+        for symbol in scope_symbols:
+            try:
+                require_complete_direct_sources(
+                    symbol,
+                    price_mode,
+                    market_sources,
+                    frequency=frequency,
+                )
+            except ValueError as exc:
+                raise OSError(str(exc)) from exc
     sources.extend(market_sources)
-    if os.path.lexists(manifest) and verify_manifest_members:
+    if contract is not None and verify_manifest_members:
         for expected in contract.files:
             # Validate every logical identity once before execution.  The
             # post-run snapshot skips this full-table decode and relies on the
@@ -602,6 +616,13 @@ def run_backtest(
         回测结果字典
     """
     start_time = time.time()
+    # Freeze the same default root that CacheManager would otherwise resolve
+    # implicitly. Passing ``None`` through to the engine and provenance
+    # collector would let the engine read prices while source verification
+    # recorded an empty tuple.
+    data_root = Path(
+        DEFAULT_DATA_ROOT if data_root is None else data_root
+    ).expanduser().resolve()
 
     # 结束日期默认今天
     if end_date is None:
@@ -942,6 +963,7 @@ def run_backtest(
             contextlib.redirect_stdout(sys.stderr) if not verbose
             else contextlib.nullcontext()
         )
+        phase = 'source_verification'
         pre_run_source_fingerprints = _source_fingerprints(
             data_root,
             symbols=pool_symbols,
